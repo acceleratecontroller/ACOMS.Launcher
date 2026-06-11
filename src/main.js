@@ -51,15 +51,46 @@ function notifyOpenStateChanged() {
   }
 }
 
-// Any attempt by page content to open a new window (e.g. target="_blank")
-// is sent to the user's default browser instead of spawning app windows.
-function routeNewWindowsToBrowser(contents) {
-  contents.setWindowOpenHandler(({ url }) => {
-    if (url && /^https?:\/\//i.test(url)) {
-      shell.openExternal(url);
-    }
-    return { action: 'deny' };
-  });
+// Match a URL to one of the configured portals by host, so a cross-app link
+// (e.g. WIP linking a job into GIS) can be recognised as "one of ours".
+function findPortalForUrl(url) {
+  let host;
+  try {
+    host = new URL(url).host.toLowerCase();
+  } catch {
+    return null;
+  }
+  return (
+    portals.find((p) => {
+      try {
+        return new URL(p.url).host.toLowerCase() === host;
+      } catch {
+        return false;
+      }
+    }) || null
+  );
+}
+
+// Decide what happens when page content tries to open a new window
+// (e.g. target="_blank" or window.open):
+//   - If the link points at one of our portals, keep it inside the launcher:
+//     open/focus that portal's window and load the linked page. This is what
+//     makes WIP -> GIS (and any portal -> portal) link switch windows instead
+//     of escaping to a browser tab.
+//   - Otherwise it's a genuinely external site, so hand it to the default
+//     browser as before.
+function handleNewWindow(url) {
+  const portal = findPortalForUrl(url);
+  if (portal) {
+    openPortal(portal.id, url);
+  } else if (url && /^https?:\/\//i.test(url)) {
+    shell.openExternal(url);
+  }
+  return { action: 'deny' };
+}
+
+function attachLinkHandling(contents) {
+  contents.setWindowOpenHandler(({ url }) => handleNewWindow(url));
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +147,7 @@ function showPicker() {
     }
   });
 
-  routeNewWindowsToBrowser(pickerWindow.webContents);
+  attachLinkHandling(pickerWindow.webContents);
   pickerWindow.loadFile(path.join(__dirname, 'picker.html'));
 
   pickerWindow.once('ready-to-show', () => {
@@ -172,20 +203,29 @@ function createTray() {
 // ---------------------------------------------------------------------------
 // Portal windows
 // ---------------------------------------------------------------------------
-function openPortal(id) {
+// Open (or focus) a portal window.
+//   - From the picker: openPortal(id) with no targetUrl — focus the existing
+//     window untouched (never reload), matching the picker's contract.
+//   - From a cross-app link: openPortal(id, targetUrl) — focus the window AND
+//     navigate it to the linked page, so you land on the right job/record.
+function openPortal(id, targetUrl) {
+  const portal = portals.find((p) => p.id === id);
+  if (!portal) {
+    console.error('Unknown portal id:', id);
+    return;
+  }
+
   const existing = portalWindows.get(id);
   if (existing && !existing.isDestroyed()) {
-    // Already open — just bring it to the front, never reload.
+    // Only navigate when a specific deep link was requested and it differs
+    // from what's already showing; a plain picker click never reloads.
+    if (targetUrl && targetUrl !== existing.webContents.getURL()) {
+      existing.loadURL(targetUrl);
+    }
     if (existing.isMinimized()) existing.restore();
     existing.show();
     existing.focus();
     hidePicker();
-    return;
-  }
-
-  const portal = portals.find((p) => p.id === id);
-  if (!portal) {
-    console.error('Unknown portal id:', id);
     return;
   }
 
@@ -200,8 +240,8 @@ function openPortal(id) {
     }
   });
 
-  routeNewWindowsToBrowser(win.webContents);
-  win.loadURL(portal.url);
+  attachLinkHandling(win.webContents);
+  win.loadURL(targetUrl || portal.url);
 
   portalWindows.set(id, win);
   notifyOpenStateChanged();

@@ -10,8 +10,11 @@ One Mac Dock icon for all your ACOMS web portals.
 - A **green dot** next to a portal means it's currently open.
 - Closing all the windows does **not** quit the app — the Dock icon stays
   ready.
-- Links inside a portal that try to open a new tab/window open in your
-  **normal default browser** instead.
+- **Cross-app links stay in the launcher.** A link from one portal to another
+  (e.g. opening a job from WIP in GIS) switches to that portal's window — it
+  doesn't escape to a browser tab.
+- Links to **outside** websites (not one of your portals) open in your
+  **normal default browser**.
 
 This is a personal app for you. It is not sold or code-signed, so macOS will
 warn you the first time you open it — there's a one-time "right-click → Open"
