@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Background: dark slate rounded square -->
+  <rect x="0" y="0" width="1024" height="1024" rx="120" ry="120" fill="#2A343E"/>
+
+  <!-- Orange "A" chevron: two thick legs meeting at the apex, open at the base -->
+  <path fill="#ED8430"
+        d="M512 232
+           L798 808
+           L672 808
+           L512 486
+           L352 808
+           L226 808
+           Z"/>
+
+  <!-- Teal accent peak at the base (left) -->
+  <path fill="#1AA298" d="M468 648 L398 782 L538 782 Z"/>
+
+  <!-- Coral accent peak at the base (right) -->
+  <path fill="#E14C35" d="M566 668 L496 782 L636 782 Z"/>
+</svg>

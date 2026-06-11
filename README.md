@@ -169,6 +169,18 @@ After editing `portals.json`:
 
 ---
 
+## The app icon
+
+The Dock / taskbar icon is **`build/icon.png`** (1024×1024). `npm run build`
+turns it into the proper Mac `.icns` and Windows `.ico` automatically — you
+don't have to do anything.
+
+To change the icon, just replace `build/icon.png` with any square (ideally
+1024×1024) PNG and rebuild. The editable vector source is `build/icon.svg` if
+you'd rather tweak the shapes/colours.
+
+---
+
 ## Windows (later)
 
 The project is already set up to build a Windows version too. On a Windows PC
