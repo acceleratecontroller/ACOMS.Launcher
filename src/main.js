@@ -56,14 +56,14 @@ function notifyOpenStateChanged() {
 function findPortalForUrl(url) {
   let host;
   try {
-    host = new URL(url).host.toLowerCase();
+    host = new URL(url).hostname.toLowerCase();
   } catch {
     return null;
   }
   return (
     portals.find((p) => {
       try {
-        return new URL(p.url).host.toLowerCase() === host;
+        return new URL(p.url).hostname.toLowerCase() === host;
       } catch {
         return false;
       }
@@ -81,6 +81,12 @@ function findPortalForUrl(url) {
 //     browser as before.
 function handleNewWindow(url) {
   const portal = findPortalForUrl(url);
+  // Diagnostic: shows in the `npm run dev` terminal what each link does.
+  console.log(
+    `[launcher] link opened -> ${url}  ::  ${
+      portal ? `kept in launcher (${portal.id})` : 'sent to browser (not a known portal)'
+    }`
+  );
   if (portal) {
     openPortal(portal.id, url);
   } else if (url && /^https?:\/\//i.test(url)) {
