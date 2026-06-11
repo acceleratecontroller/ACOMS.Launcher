@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Lock the page down: only our own inline styles/scripts, no remote loads. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:;"
+    />
+    <title>ACOMS Launcher</title>
+    <link rel="stylesheet" href="picker.css" />
+  </head>
+  <body>
+    <header class="header">
+      <h1>ACOMS Launcher</h1>
+      <p class="subtitle">Pick a portal to open</p>
+    </header>
+
+    <main id="portal-list" class="portal-list" aria-live="polite">
+      <!-- Cards are rendered by picker.js -->
+    </main>
+
+    <footer class="footer">
+      <span class="legend"><span class="dot dot--open"></span> currently open</span>
+    </footer>
+
+    <script src="picker.js"></script>
+  </body>
+</html>

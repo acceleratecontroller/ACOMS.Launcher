@@ -1,0 +1,42 @@
+{
+  "_comment": "Edit this file to add / remove / rename your ACOMS portals. After changing it, pull + rebuild (see README.md). Each portal needs a unique 'id', a display 'name', a short 'tagline', and the 'url' to open.",
+  "_doubleCheckUrls": "NOTE: the email, gis and controller URLs below were guessed during setup. Please double-check that acoms-email, acoms-gis and acoms-controller point at the right deployments before trusting them.",
+  "portals": [
+    {
+      "id": "acoms-os",
+      "name": "ACOMS.OS",
+      "tagline": "People & identity",
+      "url": "https://acoms-os.vercel.app"
+    },
+    {
+      "id": "acoms-wip",
+      "name": "ACOMS.WIP",
+      "tagline": "Clients, contracts & jobs",
+      "url": "https://acoms-wip.vercel.app"
+    },
+    {
+      "id": "acoms-auth",
+      "name": "ACOMS.Auth",
+      "tagline": "Sign-in & permissions",
+      "url": "https://acoms-auth.vercel.app"
+    },
+    {
+      "id": "acoms-controller",
+      "name": "ACOMS.Controller",
+      "tagline": "Tasks & shared tools",
+      "url": "https://acoms-controller.vercel.app"
+    },
+    {
+      "id": "acoms-email",
+      "name": "ACOMS.Email",
+      "tagline": "Mail & reconciliation",
+      "url": "https://acoms-email.vercel.app"
+    },
+    {
+      "id": "acoms-gis",
+      "name": "ACOMS.GIS",
+      "tagline": "Mapping",
+      "url": "https://acoms-gis.vercel.app"
+    }
+  ]
+}
