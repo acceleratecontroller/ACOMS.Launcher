@@ -181,13 +181,60 @@ you'd rather tweak the shapes/colours.
 
 ---
 
-## Windows (later)
+## Building the Windows version (on a Windows PC)
 
-The project is already set up to build a Windows version too. On a Windows PC
-with Node.js installed you'd run `npm run build:win`. The Mac and Windows
-builds come from the same code and the same `portals.json`, so they stay in
-sync — change a portal once, rebuild both. (You build each on its own
-operating system: the `.dmg` on a Mac, the Windows installer on a PC.)
+The Mac and Windows apps come from the **same code and the same
+`portals.json`**, so they stay in sync — change a portal once, rebuild on each
+machine. You build each version on its own operating system: the `.dmg` on a
+Mac, the Windows installer on a PC. (You can't build the Windows version on
+the Mac, or vice-versa.)
+
+On the Windows PC, do this once:
+
+1. **Install Node.js (LTS)** from <https://nodejs.org> — click the big "LTS"
+   button and run the installer (accept the defaults).
+2. **Install GitHub Desktop** from <https://desktop.github.com> and sign in.
+3. In GitHub Desktop, **File → Clone repository → acceleratecontroller/
+   ACOMS.Launcher**, and clone it to a folder you'll remember.
+4. Open the **Command Prompt** (press the Start button, type `cmd`, press
+   Enter), then point it at the project folder. Easiest way: in File Explorer,
+   open the ACOMS.Launcher folder, click the address bar, type `cmd` and press
+   Enter — a Command Prompt opens already in that folder.
+5. Run these two commands, one after the other:
+
+   ```bat
+   npm install
+   npm run build:win
+   ```
+
+6. When it finishes, open the **`dist`** folder inside the project. You'll find
+   **`ACOMS Launcher Setup 1.0.0.exe`** — that's the installer.
+
+### Installing it on Windows
+
+1. Double-click **`ACOMS Launcher Setup 1.0.0.exe`** and follow the prompts.
+   It creates a Desktop shortcut and a Start-menu entry.
+2. **The "Windows protected your PC" warning** — because the app isn't signed
+   with a paid certificate (same reason as the Mac "unidentified developer"
+   message), Windows SmartScreen will show a blue box the first time. Click
+   **"More info"**, then **"Run anyway"**. This is expected for a personal app.
+
+### How it behaves on Windows
+
+Windows has no Dock, so the launcher lives in the **system tray** — the little
+cluster of icons next to the clock (you may need to click the small "^" arrow
+to see hidden ones).
+
+- **Open a portal:** the picker appears on launch; click a portal and it opens
+  in its own window (the picker tucks away, just like on the Mac).
+- **Bring the picker back:** **click the ACOMS icon in the system tray.** It
+  pops up above the taskbar near the tray.
+- **Right-click the tray icon** for a menu with **Open ACOMS Launcher** and
+  **Quit**.
+- Closing all the windows leaves the app running quietly in the tray — use the
+  tray menu's **Quit** to fully close it.
+- Tip: drag the ACOMS icon onto the always-visible part of the tray so it's
+  never hidden behind the "^" arrow.
 
 ---
 
@@ -198,6 +245,13 @@ operating system: the `.dmg` on a Mac, the Windows installer on a PC.)
   close and reopen Terminal.
 - **A portal shows a blank/error page** — check its `url` in `portals.json`,
   and make sure you have internet access. These are live web apps.
-- **The picker doesn't reappear when I click the Dock icon** — make sure the
-  app is actually still running (its Dock icon should be there). Clicking it
-  brings the picker back.
+- **The picker doesn't reappear when I click the Dock icon** (Mac) — make sure
+  the app is actually still running (its Dock icon should be there). Clicking
+  it brings the picker back.
+- **I can't find the launcher on Windows** — look in the system tray (next to
+  the clock; click the "^" arrow to reveal hidden icons). Click the ACOMS icon
+  to summon the picker. If it's not there at all, the app has been quit — open
+  it again from the Desktop shortcut or Start menu.
+- **`'npm' is not recognized` (Windows)** — Node.js isn't installed, or the
+  Command Prompt was open before you installed it. Install Node.js from
+  <https://nodejs.org>, then close and reopen the Command Prompt.

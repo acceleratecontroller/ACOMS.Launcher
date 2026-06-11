@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, shell, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, Tray, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -35,6 +35,7 @@ let portals = [];
 // Window bookkeeping
 // ---------------------------------------------------------------------------
 let pickerWindow = null;
+let tray = null;
 // Map of portal id -> BrowserWindow for portals that are currently open.
 const portalWindows = new Map();
 
@@ -67,19 +68,25 @@ function routeNewWindowsToBrowser(contents) {
 const PICKER_WIDTH = 420;
 const PICKER_HEIGHT = 560;
 
-// Place the picker just above the Dock, horizontally centred on wherever the
-// user clicked (the Dock icon sits under the cursor when 'activate' fires), so
-// it pops up right above the icon. Falls back gracefully on multi-monitor
-// setups and assumes the Dock is along the bottom (the usual layout).
-function positionPickerNearDock(win) {
+// Decide where the picker pops up.
+//   macOS  – just above the Dock, centred on the cursor (the Dock icon sits
+//            under the cursor when 'activate' fires), so it appears above the
+//            icon you clicked. Assumes the Dock is along the bottom.
+//   Windows/Linux – bottom-right, just above the taskbar, near the system tray
+//            icon it is summoned from.
+function positionPicker(win) {
   const cursor = screen.getCursorScreenPoint();
   const { workArea } = screen.getDisplayNearestPoint(cursor);
   const [width, height] = win.getSize();
   const margin = 12;
 
-  let x = Math.round(cursor.x - width / 2);
-  // Keep the window fully on screen.
-  x = Math.max(workArea.x + margin, Math.min(x, workArea.x + workArea.width - width - margin));
+  let x;
+  if (process.platform === 'darwin') {
+    x = Math.round(cursor.x - width / 2);
+    x = Math.max(workArea.x + margin, Math.min(x, workArea.x + workArea.width - width - margin));
+  } else {
+    x = workArea.x + workArea.width - width - margin;
+  }
   const y = workArea.y + workArea.height - height - margin;
 
   win.setPosition(x, y);
@@ -87,7 +94,7 @@ function positionPickerNearDock(win) {
 
 function showPicker() {
   if (pickerWindow && !pickerWindow.isDestroyed()) {
-    positionPickerNearDock(pickerWindow);
+    positionPicker(pickerWindow);
     pickerWindow.show();
     pickerWindow.focus();
     return;
@@ -113,7 +120,7 @@ function showPicker() {
   pickerWindow.loadFile(path.join(__dirname, 'picker.html'));
 
   pickerWindow.once('ready-to-show', () => {
-    positionPickerNearDock(pickerWindow);
+    positionPicker(pickerWindow);
     pickerWindow.show();
     pickerWindow.focus();
   });
@@ -124,10 +131,41 @@ function showPicker() {
 }
 
 // Tuck the picker away after a portal is launched, so it isn't always sitting
-// on screen. The Dock icon brings it back (see the 'activate' handler).
+// on screen. The Dock icon (macOS) or tray icon (Windows) brings it back.
 function hidePicker() {
   if (pickerWindow && !pickerWindow.isDestroyed() && pickerWindow.isVisible()) {
     pickerWindow.hide();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// System tray (Windows / Linux)
+// ---------------------------------------------------------------------------
+// Windows has no Dock, and clicking a running app's taskbar button focuses an
+// open portal window rather than re-summoning the picker. A tray icon next to
+// the clock is the reliable "bring the picker back" affordance there. macOS
+// keeps its Dock-based behaviour and gets no tray.
+function createTray() {
+  if (process.platform === 'darwin') return;
+
+  try {
+    const iconFile = process.platform === 'win32' ? 'tray.ico' : 'tray.png';
+    tray = new Tray(path.join(__dirname, iconFile));
+    tray.setToolTip('ACOMS Launcher');
+
+    const menu = Menu.buildFromTemplate([
+      { label: 'Open ACOMS Launcher', click: () => showPicker() },
+      { type: 'separator' },
+      { label: 'Quit', click: () => app.quit() }
+    ]);
+    tray.setContextMenu(menu);
+
+    // Left-click the tray icon pops the picker straight up.
+    tray.on('click', () => showPicker());
+  } catch (err) {
+    // A missing system tray shouldn't take the app down; the picker still
+    // opens on launch and via the single-instance relaunch handler.
+    console.error('Could not create tray icon:', err.message);
   }
 }
 
@@ -167,6 +205,7 @@ function openPortal(id) {
 
   portalWindows.set(id, win);
   notifyOpenStateChanged();
+  hidePicker();
 
   win.on('closed', () => {
     portalWindows.delete(id);
@@ -199,19 +238,17 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     portals = loadPortals();
+    createTray();
     showPicker();
 
-    // Clicking the Dock icon (with no windows open) re-opens the picker.
+    // Clicking the Dock icon (macOS) re-opens the picker.
     app.on('activate', () => {
       showPicker();
     });
   });
 }
 
-// On macOS, closing every window should NOT quit the app — the Dock icon
-// stays usable so the picker can be summoned again.
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
+// Closing every window should NOT quit the app: on macOS the Dock icon stays
+// usable, and on Windows/Linux the tray icon keeps the picker summonable.
+// Quitting is explicit — Cmd+Q on macOS, the tray menu's Quit on Windows.
+app.on('window-all-closed', () => {});
