@@ -98,6 +98,9 @@ function attachLinkHandling(contents) {
 // ---------------------------------------------------------------------------
 const PICKER_WIDTH = 420;
 const PICKER_HEIGHT = 560;
+// Room left below the picker for an auto-hidden macOS Dock to slide up over,
+// so the picker sits above it rather than behind it.
+const AUTO_HIDE_DOCK_CLEARANCE = 96;
 
 // Decide where the picker pops up.
 //   macOS  – just above the Dock, centred on the cursor (the Dock icon sits
@@ -107,9 +110,20 @@ const PICKER_HEIGHT = 560;
 //            icon it is summoned from.
 function positionPicker(win) {
   const cursor = screen.getCursorScreenPoint();
-  const { workArea } = screen.getDisplayNearestPoint(cursor);
+  const { workArea, bounds } = screen.getDisplayNearestPoint(cursor);
   const [width, height] = win.getSize();
   const margin = 12;
+
+  // When the Dock auto-hides, macOS reserves no screen space for it, so the
+  // work area reaches the bottom edge and our window would sit under the Dock
+  // when it slides up. Detect "no inset on any edge" and leave clearance.
+  const bottomInset = bounds.y + bounds.height - (workArea.y + workArea.height);
+  const sideInset = Math.max(
+    workArea.x - bounds.x,
+    bounds.x + bounds.width - (workArea.x + workArea.width)
+  );
+  const dockAutoHidden = process.platform === 'darwin' && bottomInset < 2 && sideInset < 2;
+  const bottomGap = dockAutoHidden ? AUTO_HIDE_DOCK_CLEARANCE : margin;
 
   let x;
   if (process.platform === 'darwin') {
@@ -118,7 +132,7 @@ function positionPicker(win) {
   } else {
     x = workArea.x + workArea.width - width - margin;
   }
-  const y = workArea.y + workArea.height - height - margin;
+  const y = workArea.y + workArea.height - height - bottomGap;
 
   win.setPosition(x, y);
 }
