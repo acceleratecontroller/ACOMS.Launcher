@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -64,16 +64,39 @@ function routeNewWindowsToBrowser(contents) {
 // ---------------------------------------------------------------------------
 // Picker window
 // ---------------------------------------------------------------------------
+const PICKER_WIDTH = 420;
+const PICKER_HEIGHT = 560;
+
+// Place the picker just above the Dock, horizontally centred on wherever the
+// user clicked (the Dock icon sits under the cursor when 'activate' fires), so
+// it pops up right above the icon. Falls back gracefully on multi-monitor
+// setups and assumes the Dock is along the bottom (the usual layout).
+function positionPickerNearDock(win) {
+  const cursor = screen.getCursorScreenPoint();
+  const { workArea } = screen.getDisplayNearestPoint(cursor);
+  const [width, height] = win.getSize();
+  const margin = 12;
+
+  let x = Math.round(cursor.x - width / 2);
+  // Keep the window fully on screen.
+  x = Math.max(workArea.x + margin, Math.min(x, workArea.x + workArea.width - width - margin));
+  const y = workArea.y + workArea.height - height - margin;
+
+  win.setPosition(x, y);
+}
+
 function showPicker() {
   if (pickerWindow && !pickerWindow.isDestroyed()) {
+    positionPickerNearDock(pickerWindow);
     pickerWindow.show();
     pickerWindow.focus();
     return;
   }
 
   pickerWindow = new BrowserWindow({
-    width: 420,
-    height: 560,
+    width: PICKER_WIDTH,
+    height: PICKER_HEIGHT,
+    show: false,
     resizable: false,
     fullscreenable: false,
     maximizable: false,
@@ -89,9 +112,23 @@ function showPicker() {
   routeNewWindowsToBrowser(pickerWindow.webContents);
   pickerWindow.loadFile(path.join(__dirname, 'picker.html'));
 
+  pickerWindow.once('ready-to-show', () => {
+    positionPickerNearDock(pickerWindow);
+    pickerWindow.show();
+    pickerWindow.focus();
+  });
+
   pickerWindow.on('closed', () => {
     pickerWindow = null;
   });
+}
+
+// Tuck the picker away after a portal is launched, so it isn't always sitting
+// on screen. The Dock icon brings it back (see the 'activate' handler).
+function hidePicker() {
+  if (pickerWindow && !pickerWindow.isDestroyed() && pickerWindow.isVisible()) {
+    pickerWindow.hide();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -104,6 +141,7 @@ function openPortal(id) {
     if (existing.isMinimized()) existing.restore();
     existing.show();
     existing.focus();
+    hidePicker();
     return;
   }
 
