@@ -26,6 +26,7 @@
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "build/icon.png",
+      "identity": null,
       "target": [
         { "target": "dmg", "arch": ["arm64", "x64"] }
       ]
