@@ -12,7 +12,7 @@ const fs = require('fs');
 // alongside the app (see the "files" array in package.json).
 const PORTALS_PATH = path.join(__dirname, '..', 'portals.json');
 
-function loadPortals() {
+function loadConfig() {
   try {
     const raw = fs.readFileSync(PORTALS_PATH, 'utf8');
     const parsed = JSON.parse(raw);
@@ -20,16 +20,28 @@ function loadPortals() {
       throw new Error('portals.json must contain a "portals" array');
     }
     // Keep only the fields the UI needs, and ignore anything malformed.
-    return parsed.portals.filter(
+    const list = parsed.portals.filter(
       (p) => p && typeof p.id === 'string' && typeof p.url === 'string'
     );
+    // Optional Quick Note shortcut — a single deep link (e.g. a fresh note in
+    // ACOMS.Controller). Only used if it has a url.
+    const qn =
+      parsed.quickNote && typeof parsed.quickNote.url === 'string'
+        ? {
+            name: parsed.quickNote.name || 'Quick Note',
+            tagline: parsed.quickNote.tagline || '',
+            url: parsed.quickNote.url
+          }
+        : null;
+    return { portals: list, quickNote: qn };
   } catch (err) {
     console.error('Failed to load portals.json:', err.message);
-    return [];
+    return { portals: [], quickNote: null };
   }
 }
 
 let portals = [];
+let quickNote = null;
 
 // ---------------------------------------------------------------------------
 // Window bookkeeping
@@ -38,9 +50,19 @@ let pickerWindow = null;
 let tray = null;
 // Map of portal id -> BrowserWindow for portals that are currently open.
 const portalWindows = new Map();
+// Dedicated Quick Note window (a single reusable scratchpad, separate from the
+// portal windows above).
+let quickNoteWindow = null;
+// Sentinel id included in the "open" list so the picker can show a dot on the
+// Quick Note button while its window is open.
+const QUICK_NOTE_ID = '__quicknote__';
 
 function openPortalIds() {
-  return Array.from(portalWindows.keys());
+  const ids = Array.from(portalWindows.keys());
+  if (quickNoteWindow && !quickNoteWindow.isDestroyed()) {
+    ids.push(QUICK_NOTE_ID);
+  }
+  return ids;
 }
 
 // Tell the picker (if it's open) which portals currently have a window, so it
@@ -268,15 +290,62 @@ function openPortal(id, targetUrl) {
 }
 
 // ---------------------------------------------------------------------------
+// Quick Note window
+// ---------------------------------------------------------------------------
+// A separate, smaller window that jumps straight to a fresh Quick Note in
+// ACOMS.Controller (via the deep link in portals.json). Reused (focused) if
+// already open rather than spawning duplicates, and shares the app session so
+// it stays logged in like any portal.
+function openQuickNote() {
+  if (!quickNote) return;
+
+  if (quickNoteWindow && !quickNoteWindow.isDestroyed()) {
+    if (quickNoteWindow.isMinimized()) quickNoteWindow.restore();
+    quickNoteWindow.show();
+    quickNoteWindow.focus();
+    hidePicker();
+    return;
+  }
+
+  quickNoteWindow = new BrowserWindow({
+    width: 900,
+    height: 720,
+    title: quickNote.name,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+
+  attachLinkHandling(quickNoteWindow.webContents);
+  quickNoteWindow.loadURL(quickNote.url);
+
+  notifyOpenStateChanged();
+  hidePicker();
+
+  quickNoteWindow.on('closed', () => {
+    quickNoteWindow = null;
+    notifyOpenStateChanged();
+  });
+}
+
+// ---------------------------------------------------------------------------
 // IPC (renderer <-> main)
 // ---------------------------------------------------------------------------
 ipcMain.handle('portals:get', () => ({
   portals,
-  openIds: openPortalIds()
+  openIds: openPortalIds(),
+  quickNote: quickNote ? { name: quickNote.name, tagline: quickNote.tagline } : null,
+  quickNoteId: QUICK_NOTE_ID
 }));
 
 ipcMain.handle('portal:open', (_event, id) => {
   openPortal(id);
+});
+
+ipcMain.handle('quicknote:open', () => {
+  openQuickNote();
 });
 
 // ---------------------------------------------------------------------------
@@ -291,7 +360,9 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
-    portals = loadPortals();
+    const cfg = loadConfig();
+    portals = cfg.portals;
+    quickNote = cfg.quickNote;
     createTray();
     showPicker();
 

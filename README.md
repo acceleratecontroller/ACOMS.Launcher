@@ -15,6 +15,9 @@ One Mac Dock icon for all your ACOMS web portals.
   doesn't escape to a browser tab.
 - Links to **outside** websites (not one of your portals) open in your
   **normal default browser**.
+- A separate **Quick Note** button (top of the picker) jumps straight to a
+  fresh note in ACOMS.Controller, in its own small window, so you can jot
+  something down fast.
 
 This is a personal app for you. It is not sold or code-signed, so macOS will
 warn you the first time you open it — there's a one-time "right-click → Open"
@@ -169,6 +172,26 @@ After editing `portals.json`:
 3. If the change was made in the repo by someone else, first **pull** the
    latest in GitHub Desktop (**Fetch origin → Pull origin**), then run
    `npm run build` again.
+
+### The Quick Note button
+
+`portals.json` also has a `quickNote` block that powers the amber **Quick
+Note** button:
+
+```json
+"quickNote": {
+  "name": "Quick Note",
+  "tagline": "Jot something into Controller",
+  "url": "https://acoms-controller.vercel.app/tasks?tab=notes&compose=1"
+}
+```
+
+The `?tab=notes&compose=1` on the end is what tells ACOMS.Controller to open
+the Quick Notes tab and start a **new** note automatically. That only works
+once the matching Controller update is **deployed** — until then the button
+still opens the Task Manager page, you'd just click into Quick Notes yourself.
+Change the base address here if Controller ever moves. Remove the whole
+`quickNote` block to hide the button.
 
 ---
 
