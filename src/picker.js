@@ -8,52 +8,46 @@ const quickNoteSlot = document.getElementById('quicknote-slot');
 
 let portals = [];
 let quickNote = null;
-let quickNoteId = '__quicknote__';
 let openIds = new Set();
+
+function makeQuickNoteHalf(icon, label, action) {
+  const btn = document.createElement('button');
+  btn.className = `quicknote__half quicknote__half--${action}`;
+  btn.type = 'button';
+  btn.title = label;
+
+  const iconEl = document.createElement('span');
+  iconEl.className = 'quicknote__icon';
+  iconEl.textContent = icon;
+
+  const labelEl = document.createElement('span');
+  labelEl.className = 'quicknote__label';
+  labelEl.textContent = label;
+
+  btn.appendChild(iconEl);
+  btn.appendChild(labelEl);
+
+  btn.addEventListener('click', () => {
+    window.acoms.openQuickNote(action);
+  });
+  return btn;
+}
 
 function renderQuickNote() {
   quickNoteSlot.innerHTML = '';
   if (!quickNote) return;
 
-  const isOpen = openIds.has(quickNoteId);
+  const strip = document.createElement('div');
+  strip.className = 'quicknote';
 
-  const btn = document.createElement('button');
-  btn.className = 'quicknote';
-  btn.type = 'button';
-  btn.title = isOpen
-    ? `${quickNote.name} is open — bring it to the front`
-    : quickNote.name;
+  if (quickNote.hasNew) {
+    strip.appendChild(makeQuickNoteHalf('📝', quickNote.newLabel || 'New Note', 'new'));
+  }
+  if (quickNote.hasView) {
+    strip.appendChild(makeQuickNoteHalf('🗂️', quickNote.viewLabel || 'View Notes', 'view'));
+  }
 
-  const icon = document.createElement('span');
-  icon.className = 'quicknote__icon';
-  icon.textContent = '📝';
-
-  const text = document.createElement('span');
-  text.className = 'quicknote__text';
-
-  const name = document.createElement('span');
-  name.className = 'quicknote__name';
-  name.textContent = quickNote.name;
-
-  const tagline = document.createElement('span');
-  tagline.className = 'quicknote__tagline';
-  tagline.textContent = quickNote.tagline || '';
-
-  text.appendChild(name);
-  text.appendChild(tagline);
-
-  const dot = document.createElement('span');
-  dot.className = isOpen ? 'dot dot--open' : 'dot';
-
-  btn.appendChild(icon);
-  btn.appendChild(text);
-  btn.appendChild(dot);
-
-  btn.addEventListener('click', () => {
-    window.acoms.openQuickNote();
-  });
-
-  quickNoteSlot.appendChild(btn);
+  quickNoteSlot.appendChild(strip);
 }
 
 function renderPortals() {
@@ -115,7 +109,6 @@ async function init() {
   const data = await window.acoms.getPortals();
   portals = data.portals || [];
   quickNote = data.quickNote || null;
-  if (data.quickNoteId) quickNoteId = data.quickNoteId;
   openIds = new Set(data.openIds || []);
   render();
 

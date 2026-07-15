@@ -173,25 +173,33 @@ After editing `portals.json`:
    latest in GitHub Desktop (**Fetch origin → Pull origin**), then run
    `npm run build` again.
 
-### The Quick Note button
+### The Quick Note buttons
 
-`portals.json` also has a `quickNote` block that powers the amber **Quick
-Note** button:
+`portals.json` also has a `quickNote` block that powers the amber split button
+at the top of the picker — **New Note** and **View Notes**:
 
 ```json
 "quickNote": {
-  "name": "Quick Note",
-  "tagline": "Jot something into Controller",
-  "url": "https://acoms-controller.vercel.app/tasks?tab=notes&compose=1"
+  "new": {
+    "label": "New Note",
+    "url": "https://acoms-controller.vercel.app/tasks?tab=notes&compose=1"
+  },
+  "view": {
+    "label": "View Notes",
+    "url": "https://acoms-controller.vercel.app/tasks?tab=notes"
+  }
 }
 ```
 
-The `?tab=notes&compose=1` on the end is what tells ACOMS.Controller to open
-the Quick Notes tab and start a **new** note automatically. That only works
-once the matching Controller update is **deployed** — until then the button
-still opens the Task Manager page, you'd just click into Quick Notes yourself.
-Change the base address here if Controller ever moves. Remove the whole
-`quickNote` block to hide the button.
+- **New Note** → `?tab=notes&compose=1` opens Controller's Quick Notes tab and
+  starts a fresh note automatically.
+- **View Notes** → `?tab=notes` opens the Quick Notes tab so you can browse
+  what you've written.
+
+The auto-open-a-note behaviour needs the matching Controller update
+**deployed** (it is, as of this feature). Change the `label`s or `url`s to suit,
+or drop either half (`new` / `view`) to show only one. Remove the whole
+`quickNote` block to hide the buttons entirely.
 
 ---
 

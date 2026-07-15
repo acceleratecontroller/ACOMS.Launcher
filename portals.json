@@ -1,11 +1,17 @@
 {
   "_comment": "Edit this file to add / remove / rename your ACOMS portals. After changing it, pull + rebuild (see README.md). Each portal needs a unique 'id', a display 'name', a short 'tagline', and the 'url' to open.",
   "_doubleCheckUrls": "NOTE: the email, gis and controller URLs below were guessed during setup. Please double-check that acoms-email, acoms-gis and acoms-controller point at the right deployments before trusting them.",
-  "_quickNoteComment": "The Quick Note button opens straight to a fresh note in ACOMS.Controller. The ?tab=notes&compose=1 part tells Controller to open the Quick Notes tab and start a new note (requires the matching Controller update to be deployed). Change the base URL here if Controller moves.",
+  "_quickNoteComment": "The Quick Note strip has two halves. 'new' jumps to a fresh note (compose=1); 'view' opens the Quick Notes list. Both need the matching Controller update deployed. Change the base URLs here if Controller moves.",
   "quickNote": {
-    "name": "Quick Note",
-    "tagline": "Jot something into Controller",
-    "url": "https://acoms-controller.vercel.app/tasks?tab=notes&compose=1"
+    "tagline": "Jot or browse Controller notes",
+    "new": {
+      "label": "New Note",
+      "url": "https://acoms-controller.vercel.app/tasks?tab=notes&compose=1"
+    },
+    "view": {
+      "label": "View Notes",
+      "url": "https://acoms-controller.vercel.app/tasks?tab=notes"
+    }
   },
   "portals": [
     {

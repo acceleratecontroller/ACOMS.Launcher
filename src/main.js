@@ -23,16 +23,27 @@ function loadConfig() {
     const list = parsed.portals.filter(
       (p) => p && typeof p.id === 'string' && typeof p.url === 'string'
     );
-    // Optional Quick Note shortcut — a single deep link (e.g. a fresh note in
-    // ACOMS.Controller). Only used if it has a url.
-    const qn =
-      parsed.quickNote && typeof parsed.quickNote.url === 'string'
-        ? {
-            name: parsed.quickNote.name || 'Quick Note',
-            tagline: parsed.quickNote.tagline || '',
-            url: parsed.quickNote.url
-          }
-        : null;
+    // Optional Quick Note strip — two deep links into ACOMS.Controller: a
+    // "new" action (compose a fresh note) and a "view" action (browse notes).
+    // Older single-url configs still work as the "new" action.
+    const qnRaw = parsed.quickNote;
+    let qn = null;
+    if (qnRaw && typeof qnRaw === 'object') {
+      const newUrl =
+        (qnRaw.new && typeof qnRaw.new.url === 'string' && qnRaw.new.url) ||
+        (typeof qnRaw.url === 'string' && qnRaw.url) ||
+        null;
+      const viewUrl = qnRaw.view && typeof qnRaw.view.url === 'string' ? qnRaw.view.url : null;
+      if (newUrl || viewUrl) {
+        qn = {
+          tagline: qnRaw.tagline || '',
+          newUrl,
+          newLabel: (qnRaw.new && qnRaw.new.label) || 'New Note',
+          viewUrl,
+          viewLabel: (qnRaw.view && qnRaw.view.label) || 'View Notes'
+        };
+      }
+    }
     return { portals: list, quickNote: qn };
   } catch (err) {
     console.error('Failed to load portals.json:', err.message);
@@ -119,7 +130,9 @@ function attachLinkHandling(contents) {
 // Picker window
 // ---------------------------------------------------------------------------
 const PICKER_WIDTH = 420;
-const PICKER_HEIGHT = 560;
+// Tall enough to show the Quick Note strip plus the current portals without a
+// scrollbar; it only scrolls if you add a lot more portals.
+const PICKER_HEIGHT = 700;
 // Room left below the picker for an auto-hidden macOS Dock to slide up over,
 // so the picker sits above it rather than behind it.
 const AUTO_HIDE_DOCK_CLEARANCE = 96;
@@ -227,8 +240,9 @@ function createTray() {
     ]);
     tray.setContextMenu(menu);
 
-    // Left-click the tray icon pops the picker straight up.
+    // Left-click (or double-click) the tray icon pops the picker straight up.
     tray.on('click', () => showPicker());
+    tray.on('double-click', () => showPicker());
   } catch (err) {
     // A missing system tray shouldn't take the app down; the picker still
     // opens on launch and via the single-instance relaunch handler.
@@ -296,10 +310,15 @@ function openPortal(id, targetUrl) {
 // ACOMS.Controller (via the deep link in portals.json). Reused (focused) if
 // already open rather than spawning duplicates, and shares the app session so
 // it stays logged in like any portal.
-function openQuickNote() {
+function openQuickNote(action) {
   if (!quickNote) return;
+  const url = action === 'view' ? quickNote.viewUrl : quickNote.newUrl;
+  if (!url) return;
 
   if (quickNoteWindow && !quickNoteWindow.isDestroyed()) {
+    // Navigate the existing window to the requested action (a fresh note for
+    // "new", the list for "view") and bring it forward.
+    quickNoteWindow.loadURL(url);
     if (quickNoteWindow.isMinimized()) quickNoteWindow.restore();
     quickNoteWindow.show();
     quickNoteWindow.focus();
@@ -310,7 +329,7 @@ function openQuickNote() {
   quickNoteWindow = new BrowserWindow({
     width: 900,
     height: 720,
-    title: quickNote.name,
+    title: 'Quick Notes',
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -319,7 +338,7 @@ function openQuickNote() {
   });
 
   attachLinkHandling(quickNoteWindow.webContents);
-  quickNoteWindow.loadURL(quickNote.url);
+  quickNoteWindow.loadURL(url);
 
   notifyOpenStateChanged();
   hidePicker();
@@ -336,7 +355,15 @@ function openQuickNote() {
 ipcMain.handle('portals:get', () => ({
   portals,
   openIds: openPortalIds(),
-  quickNote: quickNote ? { name: quickNote.name, tagline: quickNote.tagline } : null,
+  quickNote: quickNote
+    ? {
+        tagline: quickNote.tagline,
+        newLabel: quickNote.newLabel,
+        viewLabel: quickNote.viewLabel,
+        hasNew: !!quickNote.newUrl,
+        hasView: !!quickNote.viewUrl
+      }
+    : null,
   quickNoteId: QUICK_NOTE_ID
 }));
 
@@ -344,8 +371,8 @@ ipcMain.handle('portal:open', (_event, id) => {
   openPortal(id);
 });
 
-ipcMain.handle('quicknote:open', () => {
-  openQuickNote();
+ipcMain.handle('quicknote:open', (_event, action) => {
+  openQuickNote(action);
 });
 
 // ---------------------------------------------------------------------------
