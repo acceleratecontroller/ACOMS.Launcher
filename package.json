@@ -10,7 +10,12 @@
     "dev": "electron .",
     "build": "electron-builder --mac",
     "build:win": "electron-builder --win",
-    "build:all": "electron-builder --mac --win"
+    "build:all": "electron-builder --mac --win",
+    "release:win": "electron-builder --win --publish never",
+    "release:mac": "electron-builder --mac --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
   },
   "devDependencies": {
     "electron": "^33.2.0",
@@ -47,6 +52,11 @@
     },
     "directories": {
       "output": "dist"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "acceleratecontroller",
+      "repo": "ACOMS.Launcher"
     }
   }
 }

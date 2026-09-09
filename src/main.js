@@ -3,6 +3,7 @@
 const { app, BrowserWindow, ipcMain, shell, screen, Tray, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const updater = require('./updater');
 
 // ---------------------------------------------------------------------------
 // Portal config
@@ -231,14 +232,8 @@ function createTray() {
   try {
     const iconFile = process.platform === 'win32' ? 'tray.ico' : 'tray.png';
     tray = new Tray(path.join(__dirname, iconFile));
-    tray.setToolTip('ACOMS Launcher');
-
-    const menu = Menu.buildFromTemplate([
-      { label: 'Open ACOMS Launcher', click: () => showPicker() },
-      { type: 'separator' },
-      { label: 'Quit', click: () => app.quit() }
-    ]);
-    tray.setContextMenu(menu);
+    tray.setToolTip(`ACOMS Launcher ${app.getVersion()}`);
+    refreshTrayMenu();
 
     // Left-click (or double-click) the tray icon pops the picker straight up.
     tray.on('click', () => showPicker());
@@ -248,6 +243,39 @@ function createTray() {
     // opens on launch and via the single-instance relaunch handler.
     console.error('Could not create tray icon:', err.message);
   }
+}
+
+// The tray menu carries the update state, so it has to be rebuilt whenever
+// that state moves — Electron menus are immutable once set.
+function refreshTrayMenu() {
+  if (!tray || tray.isDestroyed()) return;
+
+  const u = updater.snapshot();
+  const items = [
+    { label: 'Open ACOMS Launcher', click: () => showPicker() },
+    { type: 'separator' },
+    { label: `Version ${u.version}`, enabled: false }
+  ];
+
+  if (u.status === 'ready') {
+    items.push({
+      label: `Restart to update to ${u.newVersion || 'the new version'}`,
+      click: () => updater.quitAndInstall()
+    });
+  } else if (u.status === 'manual') {
+    // Unsigned macOS build — we can spot the update but not apply it.
+    items.push({
+      label: `Download ${u.newVersion ? `version ${u.newVersion}` : 'the update'}…`,
+      click: () => shell.openExternal(updater.RELEASES_PAGE)
+    });
+  } else if (u.status === 'downloading') {
+    items.push({ label: u.message, enabled: false });
+  } else {
+    items.push({ label: 'Check for updates…', click: () => updater.check({ manual: true }) });
+  }
+
+  items.push({ type: 'separator' }, { label: 'Quit', click: () => app.quit() });
+  tray.setContextMenu(Menu.buildFromTemplate(items));
 }
 
 // ---------------------------------------------------------------------------
@@ -375,6 +403,27 @@ ipcMain.handle('quicknote:open', (_event, action) => {
   openQuickNote(action);
 });
 
+// Version + update state for the picker's footer.
+ipcMain.handle('app:info', () => ({
+  version: app.getVersion(),
+  update: updater.snapshot()
+}));
+
+ipcMain.handle('update:check', () => {
+  updater.check({ manual: true });
+});
+
+// "Restart now" from the footer. On an unsigned macOS build there is nothing
+// to install, so the same button hands over the download page instead.
+ipcMain.handle('update:install', () => {
+  const u = updater.snapshot();
+  if (u.status === 'ready') {
+    updater.quitAndInstall();
+  } else if (u.status === 'manual') {
+    shell.openExternal(updater.RELEASES_PAGE);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Single-instance lock: launching the app twice just refocuses the picker.
 // ---------------------------------------------------------------------------
@@ -391,12 +440,26 @@ if (!gotLock) {
     portals = cfg.portals;
     quickNote = cfg.quickNote;
     createTray();
+
+    // Keep the tray menu and the picker footer in step with the updater.
+    updater.onUpdateStatus((snapshot) => {
+      refreshTrayMenu();
+      if (pickerWindow && !pickerWindow.isDestroyed()) {
+        pickerWindow.webContents.send('update:changed', snapshot);
+      }
+    });
+    updater.init();
+
     showPicker();
 
     // Clicking the Dock icon (macOS) re-opens the picker.
     app.on('activate', () => {
       showPicker();
     });
+  });
+
+  app.on('before-quit', () => {
+    updater.dispose();
   });
 }
 
