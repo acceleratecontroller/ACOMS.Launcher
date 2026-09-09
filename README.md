@@ -54,6 +54,9 @@ The launcher keeps itself current. It checks on startup and every six hours.
 - **Windows** — it downloads the update quietly in the background, then tells
   you it's ready. It never restarts on you mid-job: click **Restart** in the
   picker's footer (or **Restart to update** in the tray menu) when it suits.
+  The update then applies quietly and the launcher reopens itself — you won't
+  be walked through the installer again. (The full installer only appears the
+  first time you set it up.)
 - **macOS** — it tells you an update exists and gives you a **Download**
   button to the release page. It can't apply the update itself, because
   macOS only lets a *signed* app update in place and these builds are
