@@ -1,6 +1,6 @@
 {
   "name": "acoms-launcher",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Desktop launcher for the ACOMS web portals — one Dock icon, a picker window, and a dedicated window per portal.",
   "main": "src/main.js",
   "author": "Accelerate Controller",
@@ -8,6 +8,7 @@
   "private": true,
   "scripts": {
     "dev": "electron .",
+    "test": "node --test \"test/*.test.js\"",
     "build": "electron-builder --mac",
     "build:win": "electron-builder --win",
     "build:all": "electron-builder --mac --win",

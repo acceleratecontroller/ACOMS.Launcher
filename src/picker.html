@@ -12,9 +12,27 @@
   </head>
   <body>
     <header class="header">
-      <h1>ACOMS Launcher</h1>
-      <p class="subtitle">Pick a portal to open</p>
+      <div class="header__row">
+        <div>
+          <h1>ACOMS Launcher</h1>
+          <p id="subtitle" class="subtitle">Pick a portal to open</p>
+        </div>
+        <button
+          id="settings-toggle"
+          class="iconbtn"
+          type="button"
+          title="Notification settings"
+          aria-label="Notification settings"
+          aria-expanded="false"
+        >
+          ⚙
+        </button>
+      </div>
     </header>
+
+    <section id="settings-panel" class="settings" aria-label="Notification settings" hidden>
+      <!-- Mute list + quiet hours are rendered by picker.js -->
+    </section>
 
     <section id="quicknote-slot" class="quicknote-slot" aria-label="Quick note">
       <!-- Quick Note button is rendered by picker.js -->

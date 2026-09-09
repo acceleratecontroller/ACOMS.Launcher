@@ -15,7 +15,7 @@
 // Windows gets the real download-and-install. Once the app is signed, macOS
 // can move onto the same path by widening CAN_SELF_INSTALL.
 
-const { app, Notification, shell } = require('electron');
+const { app, Notification, shell, powerMonitor } = require('electron');
 
 // electron-updater is a production dependency, but requiring it must never be
 // what stops the launcher opening.
@@ -31,7 +31,19 @@ try {
 const CAN_SELF_INSTALL = process.platform === 'win32';
 
 const FIRST_CHECK_DELAY_MS = 30 * 1000; // let the picker paint first
-const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+// Every 30 minutes. This was 6 hours, chosen when the launcher was a bookmark
+// folder and a stale copy cost nothing. It now carries notifications and
+// fixes, and 6 hours meant Dion sat on a known-broken version twice waiting
+// for a check that was hours away. The request is one small YAML file against
+// a CDN, so the cost of asking more often is nil.
+const CHECK_INTERVAL_MS = 30 * 60 * 1000;
+
+// A laptop that was asleep since yesterday has a timer that has not fired and
+// will not fire until its next full interval. Waking is exactly the moment a
+// person is most likely to be behind, so check then too — debounced, because
+// resume can fire more than once.
+const RESUME_CHECK_DELAY_MS = 10 * 1000;
 
 // Where a person is sent when the app cannot install the update itself.
 // The repo is public (Dion, 2026-09-09) so the app can read its update feed
@@ -69,6 +81,7 @@ let manualCheckPending = false;
 // usable control. If either is still outstanding after this, call it failed.
 const STALL_TIMEOUT_MS = 3 * 60 * 1000;
 let stallTimer = null;
+let resumeTimer = null;
 
 function armStallTimer() {
   clearStallTimer();
@@ -305,11 +318,27 @@ function init() {
 
   setTimeout(() => check(), FIRST_CHECK_DELAY_MS);
   timer = setInterval(() => check(), CHECK_INTERVAL_MS);
+
+  // Catch the machine coming back from sleep — the interval timer did not run
+  // while it was suspended, so without this a laptop opened in the morning
+  // waits another full interval before it notices anything.
+  try {
+    powerMonitor.on('resume', () => {
+      if (resumeTimer) clearTimeout(resumeTimer);
+      resumeTimer = setTimeout(() => check(), RESUME_CHECK_DELAY_MS);
+    });
+  } catch (err) {
+    // powerMonitor is unavailable on some setups; the interval still covers us.
+    console.error('Could not watch for resume:', err.message);
+  }
 }
 
 function dispose() {
   if (timer) clearInterval(timer);
+  if (resumeTimer) clearTimeout(resumeTimer);
+  clearStallTimer();
   timer = null;
+  resumeTimer = null;
   listeners = [];
 }
 
