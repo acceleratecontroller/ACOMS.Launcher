@@ -1,6 +1,6 @@
 {
   "name": "acoms-launcher",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Desktop launcher for the ACOMS web portals — one Dock icon, a picker window, and a dedicated window per portal.",
   "main": "src/main.js",
   "author": "Accelerate Controller",
@@ -40,7 +40,8 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "artifactName": "ACOMS-Launcher-${version}-${arch}.${ext}"
     },
     "win": {
       "icon": "build/icon.png",
@@ -51,7 +52,8 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "artifactName": "ACOMS-Launcher-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,

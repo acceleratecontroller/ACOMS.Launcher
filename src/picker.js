@@ -113,36 +113,49 @@ function renderUpdate() {
   label.className = 'update__label';
   const status = update ? update.status : 'idle';
 
-  if (status === 'downloading') {
+  if (status === 'checking') {
+    label.textContent = 'Checking…';
+  } else if (status === 'downloading') {
     label.textContent = update.message || 'Downloading update…';
   } else if (status === 'ready' || status === 'manual') {
     label.textContent = update.newVersion ? `v${update.newVersion} ready` : 'Update ready';
+  } else if (status === 'error') {
+    // Say what went wrong. A silent failure here is what made a stuck
+    // update look like a broken button.
+    label.textContent = update.message || 'Update failed';
   } else {
     label.textContent = appVersion ? `v${appVersion}` : '';
   }
   label.title = (update && update.message) || `ACOMS Launcher ${appVersion}`;
   updateSlot.appendChild(label);
 
+  // There is ALWAYS a button. The first version rendered none while checking
+  // or downloading, so a download stuck retrying left no way to do anything —
+  // which reads as "the check button doesn't work".
+  const btn = document.createElement('button');
+  btn.type = 'button';
+
   if (status === 'ready' || status === 'manual') {
-    const btn = document.createElement('button');
-    btn.type = 'button';
     btn.className = 'update__action';
     btn.textContent = status === 'ready' ? 'Restart' : 'Download';
     btn.title =
       status === 'ready'
         ? 'Restart the launcher to apply the update'
-        : 'Open the releases page to download the update';
+        : 'Open the releases page to download it yourself';
     btn.addEventListener('click', () => window.acoms.installUpdate());
-    updateSlot.appendChild(btn);
-  } else if (status !== 'downloading' && status !== 'checking') {
-    const btn = document.createElement('button');
-    btn.type = 'button';
+  } else if (status === 'checking' || status === 'downloading') {
     btn.className = 'update__action update__action--quiet';
-    btn.textContent = 'Check';
-    btn.title = 'Check for updates';
+    btn.textContent = status === 'checking' ? 'Checking…' : `${update.percent || 0}%`;
+    btn.disabled = true;
+    btn.title = 'In progress — this gives up after 3 minutes rather than hanging';
+  } else {
+    btn.className = 'update__action update__action--quiet';
+    btn.textContent = status === 'error' ? 'Retry' : 'Check';
+    btn.title = status === 'error' ? 'Try checking again' : 'Check for updates';
     btn.addEventListener('click', () => window.acoms.checkForUpdates());
-    updateSlot.appendChild(btn);
   }
+
+  updateSlot.appendChild(btn);
 }
 
 function render() {
