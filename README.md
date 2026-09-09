@@ -25,118 +25,79 @@ step covered below.
 
 ---
 
-## What you need on the Mac (one-time)
+## Installing it
 
-1. **GitHub Desktop** — to download (clone) and later update this project.
-   Get it from <https://desktop.github.com>.
-2. **Node.js (LTS version)** — this provides the `npm` command used to build
-   the app. Get it from <https://nodejs.org> (click the big "LTS" button and
-   run the installer).
+Download the installer from the
+[latest release](https://github.com/acceleratecontroller/ACOMS.Launcher/releases/latest)
+and run it. That's the whole thing — you do not need Node, GitHub Desktop, or
+a terminal.
 
-You do **not** need to be a developer to follow these steps. You'll copy a
-couple of commands into the Terminal app and press Return.
+- **Windows** — `ACOMS Launcher Setup <version>.exe`. Windows SmartScreen
+  shows a blue "Windows protected your PC" box the first time, because the app
+  isn't signed with a paid certificate. Click **More info** -> **Run anyway**.
+- **macOS** — `ACOMS Launcher-<version>.dmg`. Drag it into Applications. The
+  first time, macOS says it's from an "unidentified developer" (same reason):
+  **right-click** the app -> **Open** -> **Open**. After that it opens
+  normally. If macOS still refuses, **System Settings -> Privacy & Security**
+  -> **Open Anyway**.
 
----
-
-## Step 1 — Get the project onto your Mac (GitHub Desktop)
-
-1. Open **GitHub Desktop** and sign in.
-2. **File → Clone repository…**
-3. Choose **acceleratecontroller/ACOMS.Launcher** from the list, pick a folder
-   you'll remember (e.g. your Documents folder), and click **Clone**.
-4. GitHub Desktop will download the project. Note the folder it created —
-   you'll point Terminal at it in the next step.
-
-> Later, when you want the newest version, open GitHub Desktop and click
-> **Fetch origin** → **Pull origin**. That's the "pull" step referred to below.
+The portals themselves are not installed — they're the same web apps on
+Vercel, loaded over the network. Only this shell lives on your machine, and
+you sign in to each portal exactly as you would in a browser.
 
 ---
 
-## Step 2 — Open Terminal in the project folder
+## Updates
 
-The easiest way:
+The launcher keeps itself current. It checks on startup and every six hours.
 
-1. Open the **Terminal** app (press `Cmd + Space`, type "Terminal", press
-   Return).
-2. Type `cd ` (the letters c, d, then a **space**) — but don't press Return
-   yet.
-3. Drag the **ACOMS.Launcher** folder from Finder onto the Terminal window.
-   This pastes its location for you.
-4. Press **Return**.
+- **Windows** — it downloads the update quietly in the background, then tells
+  you it's ready. It never restarts on you mid-job: click **Restart** in the
+  picker's footer (or **Restart to update** in the tray menu) when it suits.
+- **macOS** — it tells you an update exists and gives you a **Download**
+  button to the release page. It can't apply the update itself, because
+  macOS only lets a *signed* app update in place and these builds are
+  unsigned. Signing is a future step.
 
-You're now "inside" the project folder, and the commands below will work.
+The current version is always in the bottom-right of the picker, next to a
+**Check** button if you'd rather look now than wait.
 
 ---
 
-## Step 3 — Install the app's building blocks (run once)
+## Working on the app (developers only)
+
+You only need this if you're changing the launcher itself.
 
 ```bash
-npm install
+npm install     # once
+npm run dev     # run from source
 ```
 
-This downloads the bits the app is built from. It can take a minute or two the
-first time. You only need to do this again if you ever delete the project and
-re-clone it.
+Updates are disabled when running from source — there's nothing to update to.
 
----
+### Cutting a release
 
-## Step 4 — Test it without building (optional but recommended)
+Releases are built by GitHub Actions, not on your machine. Both installers
+come out of one CI run, so Windows and macOS can never drift apart:
 
-```bash
-npm run dev
-```
+1. Bump `"version"` in `package.json`.
+2. Commit it, then tag and push:
 
-This launches the launcher straight away so you can click around and check
-your portals open correctly. Close the windows (or press `Cmd + Q` in
-Terminal's running process / `Ctrl + C` in the Terminal) when you're done
-testing.
+   ```bash
+   git tag v1.1.0
+   git push origin v1.1.0
+   ```
 
----
+3. `.github/workflows/release.yml` builds the Windows `.exe` and the macOS
+   `.dmg` and attaches them to a GitHub Release, along with `latest.yml` and
+   `latest-mac.yml`.
 
-## Step 5 — Build the real Mac app
+> Those two `.yml` files are what an installed app reads to notice a new
+> version. If they aren't attached to the release, nothing updates.
 
-```bash
-npm run build
-```
-
-When it finishes, look in the new **`dist`** folder inside the project. You'll
-find:
-
-- **`ACOMS Launcher-1.0.0.dmg`** — the installer disk image, and
-- an **`ACOMS Launcher.app`** (inside a `mac` / `mac-arm64` subfolder).
-
----
-
-## Step 6 — Install it and pin it to the Dock
-
-1. Double-click the **`.dmg`** file in `dist`.
-2. In the window that opens, **drag `ACOMS Launcher` into your Applications
-   folder** (you can drag it onto the Applications shortcut, or just drag the
-   `.app` from the `dist` folder into Applications).
-3. Open **Applications** and double-click **ACOMS Launcher**.
-
-### The "unidentified developer" warning (one time only)
-
-Because this is a personal app and not signed with a paid Apple Developer
-account, the first time you open it macOS will say something like *"ACOMS
-Launcher can't be opened because it is from an unidentified developer."* This
-is expected — it's your own app.
-
-To get past it **once**:
-
-1. In **Applications**, **right-click** (or `Ctrl`-click) **ACOMS Launcher**.
-2. Choose **Open**.
-3. In the dialog, click **Open** again.
-
-After this first time, it opens normally with a double-click.
-
-> If macOS still refuses, go to **System Settings → Privacy & Security**,
-> scroll down, and click **Open Anyway** next to the ACOMS Launcher message.
-
-### Keep it in the Dock
-
-With ACOMS Launcher running, **right-click its Dock icon → Options → Keep in
-Dock**. Now it's one click away whenever you need it.
+You can still build locally (`npm run build:win` / `npm run build`) to check
+packaging, but don't hand those installers around — a locally built one isn't
+part of the update chain.
 
 ---
 
@@ -215,60 +176,21 @@ you'd rather tweak the shapes/colours.
 
 ---
 
-## Building the Windows version (on a Windows PC)
+## How it behaves on Windows
 
-The Mac and Windows apps come from the **same code and the same
-`portals.json`**, so they stay in sync — change a portal once, rebuild on each
-machine. You build each version on its own operating system: the `.dmg` on a
-Mac, the Windows installer on a PC. (You can't build the Windows version on
-the Mac, or vice-versa.)
-
-On the Windows PC, do this once:
-
-1. **Install Node.js (LTS)** from <https://nodejs.org> — click the big "LTS"
-   button and run the installer (accept the defaults).
-2. **Install GitHub Desktop** from <https://desktop.github.com> and sign in.
-3. In GitHub Desktop, **File → Clone repository → acceleratecontroller/
-   ACOMS.Launcher**, and clone it to a folder you'll remember.
-4. Open the **Command Prompt** (press the Start button, type `cmd`, press
-   Enter), then point it at the project folder. Easiest way: in File Explorer,
-   open the ACOMS.Launcher folder, click the address bar, type `cmd` and press
-   Enter — a Command Prompt opens already in that folder.
-5. Run these two commands, one after the other:
-
-   ```bat
-   npm install
-   npm run build:win
-   ```
-
-6. When it finishes, open the **`dist`** folder inside the project. You'll find
-   **`ACOMS Launcher Setup 1.0.0.exe`** — that's the installer.
-
-### Installing it on Windows
-
-1. Double-click **`ACOMS Launcher Setup 1.0.0.exe`** and follow the prompts.
-   It creates a Desktop shortcut and a Start-menu entry.
-2. **The "Windows protected your PC" warning** — because the app isn't signed
-   with a paid certificate (same reason as the Mac "unidentified developer"
-   message), Windows SmartScreen will show a blue box the first time. Click
-   **"More info"**, then **"Run anyway"**. This is expected for a personal app.
-
-### How it behaves on Windows
-
-Windows has no Dock, so the launcher lives in the **system tray** — the little
-cluster of icons next to the clock (you may need to click the small "^" arrow
-to see hidden ones).
+Windows has no Dock, so the launcher lives in the **system tray** — the
+cluster of icons next to the clock (click the "^" arrow to see hidden ones).
 
 - **Open a portal:** the picker appears on launch; click a portal and it opens
-  in its own window (the picker tucks away, just like on the Mac).
-- **Bring the picker back:** **click the ACOMS icon in the system tray.** It
-  pops up above the taskbar near the tray.
-- **Right-click the tray icon** for a menu with **Open ACOMS Launcher** and
-  **Quit**.
-- Closing all the windows leaves the app running quietly in the tray — use the
-  tray menu's **Quit** to fully close it.
+  in its own window (the picker tucks away).
+- **Bring the picker back:** click the ACOMS icon in the system tray. It pops
+  up above the taskbar.
+- **Right-click the tray icon** for a menu with **Open ACOMS Launcher**, the
+  current version, **Check for updates**, and **Quit**.
+- Closing every window leaves the app running quietly in the tray — use the
+  tray menu's **Quit** to close it properly.
 - Tip: drag the ACOMS icon onto the always-visible part of the tray so it's
-  never hidden behind the "^" arrow.
+  never hidden behind the "^".
 
 ---
 

@@ -1,0 +1,79 @@
+name: Release
+
+# Builds the Windows and macOS installers and attaches them to a GitHub
+# Release. This replaces the old "clone the repo and run npm run build on each
+# machine" ritual — push a tag, and the installers exist.
+#
+# To cut a release:
+#   1. bump "version" in package.json
+#   2. git tag v1.1.0 && git push origin v1.1.0
+#
+# The launcher's own updater reads latest.yml / latest-mac.yml from the
+# published release, so those two files MUST be attached — they are what makes
+# an installed app notice there is something newer.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and release (e.g. v1.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows
+            script: release:win
+            artifacts: |
+              dist/*.exe
+              dist/*.exe.blockmap
+              dist/latest.yml
+          - os: macos-latest
+            label: macOS
+            script: release:mac
+            artifacts: |
+              dist/*.dmg
+              dist/*.dmg.blockmap
+              dist/latest-mac.yml
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build installer
+        run: npm run ${{ matrix.script }}
+        env:
+          # These builds are deliberately unsigned (no paid Apple/Windows
+          # certificate). Without this, electron-builder hunts for a signing
+          # identity on the macOS runner and fails the job.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: ${{ matrix.artifacts }}

@@ -20,5 +20,22 @@ contextBridge.exposeInMainWorld('acoms', {
     const listener = (_event, openIds) => callback(openIds);
     ipcRenderer.on('portals:open-changed', listener);
     return () => ipcRenderer.removeListener('portals:open-changed', listener);
+  },
+
+  // Returns { version, update: { status, newVersion, percent, message, ... } }.
+  getAppInfo: () => ipcRenderer.invoke('app:info'),
+
+  // Ask the updater to check now (the answer arrives via onUpdateChanged).
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+
+  // Restart into a downloaded update — or, where the app can't self-install,
+  // open the releases page instead.
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+
+  // Subscribe to update status. Returns an unsubscribe function.
+  onUpdateChanged: (callback) => {
+    const listener = (_event, snapshot) => callback(snapshot);
+    ipcRenderer.on('update:changed', listener);
+    return () => ipcRenderer.removeListener('update:changed', listener);
   }
 });
