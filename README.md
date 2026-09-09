@@ -90,7 +90,8 @@ Both settings live on your machine, in the app's own data folder.
 
 ## Updates
 
-The launcher keeps itself current. It checks on startup and every six hours.
+The launcher keeps itself current. It checks shortly after startup, every
+30 minutes after that, and again whenever the machine wakes from sleep.
 
 - **Windows** — it downloads the update quietly in the background, then tells
   you it's ready. It never restarts on you mid-job: click **Restart** in the
