@@ -268,9 +268,21 @@ function check({ manual = false } = {}) {
 function quitAndInstall() {
   if (state.status !== 'ready' || !isEligible()) return;
   quittingToInstall = true;
-  // isSilent=false so the person sees the installer run;
-  // isForceRunAfter=true so the launcher comes back on its own.
-  autoUpdater.quitAndInstall(false, true);
+  // isSilent=TRUE: apply the update without showing the NSIS wizard again.
+  //
+  // This was false at first, on the reasoning that a person should see what is
+  // happening to their machine. Wrong reasoning for an UPDATE: they already
+  // clicked Restart, so they know. Walking them back through "choose an
+  // install directory" for a version they asked for is friction, not
+  // transparency — and it is not how any other desktop app updates. The full
+  // wizard still runs for a first install, which is where it belongs.
+  //
+  // Safe to do silently here because the app installs per-user
+  // (nsis.perMachine = false), so nothing needs elevation and no UAC prompt is
+  // suppressed by this.
+  //
+  // isForceRunAfter=true so the launcher comes back on its own afterwards.
+  autoUpdater.quitAndInstall(true, true);
 }
 
 function isQuittingToInstall() {
