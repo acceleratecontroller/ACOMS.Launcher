@@ -1,5 +1,6 @@
 {
-  "_comment": "Edit this file to add / remove / rename your ACOMS portals. After changing it, pull + rebuild (see README.md). Each portal needs a unique 'id', a display 'name', a short 'tagline', and the 'url' to open.",
+  "_comment": "Edit this file to add / remove / rename your ACOMS portals. Each portal needs a unique 'id', a display 'name', a short 'tagline', and the 'url' to open.",
+  "_summaryComment": "'summary' is optional: the path to that portal's GET /api/launcher/summary route. A portal with one is polled for things waiting on you and can raise notifications; a portal without one is just a link, exactly as before. Add the key as each app grows the route.",
   "_doubleCheckUrls": "NOTE: the email, gis and controller URLs below were guessed during setup. Please double-check that acoms-email, acoms-gis and acoms-controller point at the right deployments before trusting them.",
   "_quickNoteComment": "The Quick Note strip has two halves. 'new' jumps to a fresh note (compose=1); 'view' opens the Quick Notes list. Both need the matching Controller update deployed. Change the base URLs here if Controller moves.",
   "quickNote": {
@@ -36,7 +37,8 @@
       "id": "acoms-controller",
       "name": "ACOMS.Controller",
       "tagline": "Tasks & shared tools",
-      "url": "https://acoms-controller.vercel.app"
+      "url": "https://acoms-controller.vercel.app",
+      "summary": "/api/launcher/summary"
     },
     {
       "id": "acoms-email",

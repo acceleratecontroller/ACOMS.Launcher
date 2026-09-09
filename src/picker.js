@@ -6,12 +6,17 @@
 const listEl = document.getElementById('portal-list');
 const quickNoteSlot = document.getElementById('quicknote-slot');
 const updateSlot = document.getElementById('update-slot');
+const subtitleEl = document.getElementById('subtitle');
+const settingsPanel = document.getElementById('settings-panel');
+const settingsToggle = document.getElementById('settings-toggle');
 
 let portals = [];
 let quickNote = null;
 let openIds = new Set();
 let appVersion = '';
 let update = null;
+let notifications = {};
+let settings = { muted: [], quietFrom: null, quietTo: null };
 
 function makeQuickNoteHalf(icon, label, action) {
   const btn = document.createElement('button');
@@ -53,6 +58,152 @@ function renderQuickNote() {
   quickNoteSlot.appendChild(strip);
 }
 
+// What sits on the right of a portal card, if anything.
+//   a count   — that many things are waiting on you
+//   "Sign in" — the portal logged us out; say so rather than showing nothing,
+//               because a silent zero is indistinguishable from "all clear"
+//   "Muted"   — you turned this one off; the count is deliberately hidden
+//   "?"       — unreachable; quiet, since it's usually just the network
+function makeBadge(portal) {
+  const n = notifications[portal.id];
+  if (!n || n.state === 'off' || n.state === 'idle') return null;
+
+  const el = document.createElement('span');
+
+  if (settings.muted.includes(portal.id)) {
+    el.className = 'badge badge--muted';
+    el.textContent = 'Muted';
+    el.title = `Notifications from ${portal.name} are muted`;
+    return el;
+  }
+
+  if (n.state === 'signIn') {
+    el.className = 'badge badge--signin';
+    el.textContent = 'Sign in';
+    el.title = `${portal.name} needs you to sign in again before it can tell you what's waiting`;
+    return el;
+  }
+
+  if (n.state === 'error') {
+    el.className = 'badge badge--error';
+    el.textContent = '?';
+    el.title = `Couldn't reach ${portal.name}${n.message ? ` (${n.message})` : ''}`;
+    return el;
+  }
+
+  if (n.state === 'ok' && n.badge > 0) {
+    el.className = 'badge';
+    el.textContent = String(n.badge);
+    el.title = n.summary || `${n.badge} waiting in ${portal.name}`;
+    return el;
+  }
+
+  return null;
+}
+
+// The subtitle doubles as the one-line "what's waiting" line, so the answer is
+// visible the moment the picker opens without expanding anything.
+function renderSubtitle() {
+  let total = 0;
+  const bits = [];
+  for (const portal of portals) {
+    const n = notifications[portal.id];
+    if (!n || n.state !== 'ok' || settings.muted.includes(portal.id)) continue;
+    if (n.badge > 0) {
+      total += n.badge;
+      bits.push(`${n.badge} in ${portal.name.replace(/^ACOMS\./, '')}`);
+    }
+  }
+  subtitleEl.textContent = total === 0 ? 'Pick a portal to open' : bits.join(' · ');
+}
+
+function renderSettings() {
+  settingsPanel.innerHTML = '';
+
+  const pollable = portals.filter((p) => {
+    const n = notifications[p.id];
+    return n && n.state !== 'off';
+  });
+
+  const h1 = document.createElement('p');
+  h1.className = 'settings__heading';
+  h1.textContent = 'Notify me about';
+  settingsPanel.appendChild(h1);
+
+  if (pollable.length === 0) {
+    const note = document.createElement('p');
+    note.className = 'settings__note';
+    note.textContent = 'No portals report notifications yet.';
+    settingsPanel.appendChild(note);
+  }
+
+  for (const portal of pollable) {
+    const row = document.createElement('label');
+    row.className = 'settings__row';
+
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = !settings.muted.includes(portal.id);
+    box.addEventListener('change', async () => {
+      settings = await window.acoms.setMuted(portal.id, !box.checked);
+      render();
+    });
+
+    const name = document.createElement('span');
+    name.textContent = portal.name;
+
+    row.appendChild(box);
+    row.appendChild(name);
+    settingsPanel.appendChild(row);
+  }
+
+  const h2 = document.createElement('p');
+  h2.className = 'settings__heading';
+  h2.textContent = 'Quiet hours';
+  settingsPanel.appendChild(h2);
+
+  const times = document.createElement('div');
+  times.className = 'settings__times';
+
+  const from = document.createElement('input');
+  from.type = 'time';
+  from.value = settings.quietFrom || '';
+  const to = document.createElement('input');
+  to.type = 'time';
+  to.value = settings.quietTo || '';
+
+  const apply = async () => {
+    settings = await window.acoms.setQuietHours(from.value || null, to.value || null);
+    renderSettings();
+  };
+  from.addEventListener('change', apply);
+  to.addEventListener('change', apply);
+
+  const clear = document.createElement('button');
+  clear.type = 'button';
+  clear.textContent = 'Clear';
+  clear.addEventListener('click', async () => {
+    settings = await window.acoms.setQuietHours(null, null);
+    renderSettings();
+  });
+
+  const dash = document.createElement('span');
+  dash.textContent = 'to';
+
+  times.appendChild(from);
+  times.appendChild(dash);
+  times.appendChild(to);
+  times.appendChild(clear);
+  settingsPanel.appendChild(times);
+
+  const note = document.createElement('p');
+  note.className = 'settings__note';
+  note.textContent = settings.quietFrom
+    ? 'No notifications during these hours. Counts still update, so nothing is lost — you just are not interrupted.'
+    : 'Set both times to stop notifications overnight. A range may cross midnight.';
+  settingsPanel.appendChild(note);
+}
+
 function renderPortals() {
   listEl.innerHTML = '';
 
@@ -78,6 +229,8 @@ function renderPortals() {
     const dot = document.createElement('span');
     dot.className = isOpen ? 'dot dot--open' : 'dot';
 
+    const badge = makeBadge(portal);
+
     const text = document.createElement('span');
     text.className = 'card__text';
 
@@ -93,6 +246,7 @@ function renderPortals() {
     text.appendChild(tagline);
 
     card.appendChild(text);
+    if (badge) card.appendChild(badge);
     card.appendChild(dot);
 
     card.addEventListener('click', () => {
@@ -162,6 +316,8 @@ function render() {
   renderQuickNote();
   renderPortals();
   renderUpdate();
+  renderSubtitle();
+  if (!settingsPanel.hidden) renderSettings();
 }
 
 async function init() {
@@ -173,6 +329,16 @@ async function init() {
   const info = await window.acoms.getAppInfo();
   appVersion = info.version || '';
   update = info.update || null;
+
+  settings = await window.acoms.getSettings();
+  notifications = await window.acoms.getNotifications();
+
+  settingsToggle.addEventListener('click', () => {
+    const opening = settingsPanel.hidden;
+    settingsPanel.hidden = !opening;
+    settingsToggle.setAttribute('aria-expanded', String(opening));
+    if (opening) renderSettings();
+  });
 
   render();
 
@@ -186,6 +352,14 @@ async function init() {
     update = snapshot || null;
     renderUpdate();
   });
+
+  window.acoms.onNotificationsChanged((snapshot) => {
+    notifications = snapshot || {};
+    render();
+  });
+
+  // Opening the picker is a good moment to be current — you came here to look.
+  window.acoms.refreshNotifications();
 }
 
 init();

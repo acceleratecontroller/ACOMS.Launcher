@@ -37,5 +37,28 @@ contextBridge.exposeInMainWorld('acoms', {
     const listener = (_event, snapshot) => callback(snapshot);
     ipcRenderer.on('update:changed', listener);
     return () => ipcRenderer.removeListener('update:changed', listener);
-  }
+  },
+
+  // Per-portal notification state, keyed by portal id:
+  // { state: 'ok'|'signIn'|'error'|'off'|'idle', badge, summary, items }.
+  getNotifications: () => ipcRenderer.invoke('notifications:get'),
+
+  // Poll every portal now rather than waiting for the next tick.
+  refreshNotifications: () => ipcRenderer.invoke('notifications:refresh'),
+
+  // Open a portal window at one notification item's path.
+  openNotificationItem: (portalId, itemPath) =>
+    ipcRenderer.invoke('notifications:open', portalId, itemPath),
+
+  // Subscribe to notification state. Returns an unsubscribe function.
+  onNotificationsChanged: (callback) => {
+    const listener = (_event, snapshot) => callback(snapshot);
+    ipcRenderer.on('notifications:changed', listener);
+    return () => ipcRenderer.removeListener('notifications:changed', listener);
+  },
+
+  // { muted: string[], quietFrom: "HH:MM"|null, quietTo: "HH:MM"|null }
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  setMuted: (portalId, muted) => ipcRenderer.invoke('settings:set-muted', portalId, muted),
+  setQuietHours: (from, to) => ipcRenderer.invoke('settings:set-quiet-hours', from, to)
 });

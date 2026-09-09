@@ -47,6 +47,47 @@ you sign in to each portal exactly as you would in a browser.
 
 ---
 
+## Notifications
+
+Portals that offer a `summary` endpoint (see `portals.json`) are checked every
+five minutes for things waiting on **you** — approvals in your queue, tasks
+due, that sort of thing. When something new turns up you get a normal Windows
+or macOS notification; clicking it opens that portal's window **at the
+record**, not just at the front page.
+
+What you'll see in the picker, on the right of each portal card:
+
+| | Meaning |
+|---|---|
+| a red count | that many things are waiting on you |
+| **Sign in** | that portal logged you out — it can't tell you anything until you open it and sign in again |
+| **Muted** | you turned this portal's notifications off |
+| **?** | couldn't reach the portal (usually just the network) |
+
+The "Sign in" state matters: an expired session is shown rather than quietly
+reported as zero, because "nothing waiting" and "I can't see" look identical
+otherwise.
+
+The header line summarises the total, the tray tooltip carries it too, and the
+tray menu has **Check portals now** if you don't want to wait for the next
+five-minute tick.
+
+### Turning it down
+
+The **⚙** button in the picker header opens the settings:
+
+- **Notify me about** — untick any portal to mute it. Muted portals are still
+  checked (so the count is right when you unmute) but never interrupt you.
+- **Quiet hours** — set a start and end time and nothing will interrupt you
+  between them. The range may cross midnight, so `18:00` to `07:00` works as
+  you'd expect. Counts still update during quiet hours; you just aren't
+  interrupted, and you won't get a backlog of overnight notifications dumped
+  on you at 7am.
+
+Both settings live on your machine, in the app's own data folder.
+
+---
+
 ## Updates
 
 The launcher keeps itself current. It checks on startup and every six hours.

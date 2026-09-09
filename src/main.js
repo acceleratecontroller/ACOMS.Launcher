@@ -4,6 +4,8 @@ const { app, BrowserWindow, ipcMain, shell, screen, Tray, Menu } = require('elec
 const path = require('path');
 const fs = require('fs');
 const updater = require('./updater');
+const notifications = require('./notifications');
+const store = require('./store');
 
 // ---------------------------------------------------------------------------
 // Portal config
@@ -21,9 +23,11 @@ function loadConfig() {
       throw new Error('portals.json must contain a "portals" array');
     }
     // Keep only the fields the UI needs, and ignore anything malformed.
-    const list = parsed.portals.filter(
-      (p) => p && typeof p.id === 'string' && typeof p.url === 'string'
-    );
+    // `summary` (optional) is the path to that portal's launcher-summary
+    // route; a portal without one is simply never polled.
+    const list = parsed.portals
+      .filter((p) => p && typeof p.id === 'string' && typeof p.url === 'string')
+      .map((p) => ({ ...p, summary: typeof p.summary === 'string' ? p.summary : null }));
     // Optional Quick Note strip — two deep links into ACOMS.Controller: a
     // "new" action (compose a fresh note) and a "view" action (browse notes).
     // Older single-url configs still work as the "new" action.
@@ -232,7 +236,7 @@ function createTray() {
   try {
     const iconFile = process.platform === 'win32' ? 'tray.ico' : 'tray.png';
     tray = new Tray(path.join(__dirname, iconFile));
-    tray.setToolTip(`ACOMS Launcher ${app.getVersion()}`);
+    refreshTrayTooltip();
     refreshTrayMenu();
 
     // Left-click (or double-click) the tray icon pops the picker straight up.
@@ -245,14 +249,31 @@ function createTray() {
   }
 }
 
-// The tray menu carries the update state, so it has to be rebuilt whenever
-// that state moves — Electron menus are immutable once set.
+// Windows has no badge on a tray icon, so the count lives in the tooltip —
+// the thing you get by hovering the icon you were already reaching for.
+function refreshTrayTooltip() {
+  if (!tray || tray.isDestroyed()) return;
+  const badge = notifications.totalBadge();
+  tray.setToolTip(
+    badge > 0 ? `ACOMS Launcher — ${badge} waiting on you` : `ACOMS Launcher ${app.getVersion()}`
+  );
+}
+
+// The tray menu carries the update and notification state, so it has to be
+// rebuilt whenever either moves — Electron menus are immutable once set.
 function refreshTrayMenu() {
   if (!tray || tray.isDestroyed()) return;
 
   const u = updater.snapshot();
+  const badge = notifications.totalBadge();
   const items = [
     { label: 'Open ACOMS Launcher', click: () => showPicker() },
+    { type: 'separator' },
+    {
+      label: badge > 0 ? `${badge} waiting on you` : 'Nothing waiting on you',
+      enabled: false
+    },
+    { label: 'Check portals now', click: () => notifications.pollAll() },
     { type: 'separator' },
     { label: `Version ${u.version}`, enabled: false }
   ];
@@ -403,6 +424,32 @@ ipcMain.handle('quicknote:open', (_event, action) => {
   openQuickNote(action);
 });
 
+// Per-portal notification state for the picker's badges.
+ipcMain.handle('notifications:get', () => notifications.snapshot());
+
+ipcMain.handle('notifications:refresh', () => notifications.pollAll());
+
+// Open a portal window directly at one of its notification items.
+ipcMain.handle('notifications:open', (_event, portalId, itemPath) => {
+  const portal = portals.find((p) => p.id === portalId);
+  if (!portal) return;
+  openPortal(portalId, notifications.resolveItemUrl(portal, { path: itemPath }));
+});
+
+ipcMain.handle('settings:get', () => store.getSettings());
+
+ipcMain.handle('settings:set-muted', (_event, portalId, muted) => {
+  const next = store.setMuted(portalId, muted);
+  // Muting changes the badge total, so the tray has to catch up immediately.
+  refreshTrayTooltip();
+  refreshTrayMenu();
+  return next;
+});
+
+ipcMain.handle('settings:set-quiet-hours', (_event, from, to) =>
+  store.setQuietHours(from, to)
+);
+
 // Version + update state for the picker's footer.
 ipcMain.handle('app:info', () => ({
   version: app.getVersion(),
@@ -450,6 +497,21 @@ if (!gotLock) {
     });
     updater.init();
 
+    // Poll the portals that offer a summary route and raise notifications for
+    // anything new. Clicking a notification opens that portal at the record.
+    notifications.onChanged((snapshot) => {
+      refreshTrayTooltip();
+      refreshTrayMenu();
+      app.setBadgeCount(notifications.totalBadge()); // macOS dock; no-op on Windows
+      if (pickerWindow && !pickerWindow.isDestroyed()) {
+        pickerWindow.webContents.send('notifications:changed', snapshot);
+      }
+    });
+    notifications.init({
+      portals,
+      openPortalAt: (portalId, url) => openPortal(portalId, url)
+    });
+
     showPicker();
 
     // Clicking the Dock icon (macOS) re-opens the picker.
@@ -460,6 +522,7 @@ if (!gotLock) {
 
   app.on('before-quit', () => {
     updater.dispose();
+    notifications.dispose();
   });
 }
 
