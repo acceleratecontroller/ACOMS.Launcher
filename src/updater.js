@@ -58,6 +58,32 @@ let listeners = [];
 let timer = null;
 let quittingToInstall = false;
 
+// Set while a person is waiting on the answer to a "Check for updates" they
+// clicked themselves, so the outcome can be reported once, from whichever
+// event actually settles it. Reporting from an immediate state callback (the
+// first version of this) answered with the PREVIOUS check's result before the
+// new one had run.
+let manualCheckPending = false;
+
+// A check or download that never settles would otherwise leave the UI with no
+// usable control. If either is still outstanding after this, call it failed.
+const STALL_TIMEOUT_MS = 3 * 60 * 1000;
+let stallTimer = null;
+
+function armStallTimer() {
+  clearStallTimer();
+  stallTimer = setTimeout(() => {
+    if (state.status === 'checking' || state.status === 'downloading') {
+      failed(state.status === 'downloading' ? 'download' : 'check', 'timed out');
+    }
+  }, STALL_TIMEOUT_MS);
+}
+
+function clearStallTimer() {
+  if (stallTimer) clearTimeout(stallTimer);
+  stallTimer = null;
+}
+
 function snapshot() {
   return { ...state };
 }
@@ -87,6 +113,47 @@ function onUpdateStatus(fn) {
   };
 }
 
+// Land in a state that always leaves the person something to do.
+//
+// A failed DOWNLOAD is not a dead end: the release exists, we just couldn't
+// fetch it, so fall back to the same "here's the download page" path macOS
+// uses. That is what turns a stuck spinner into a working button.
+function failed(phase, detail) {
+  clearStallTimer();
+  const known = state.newVersion;
+  if (phase === 'download' && known) {
+    setState({
+      status: 'manual',
+      message: `Couldn't download ${known} — open the releases page`
+    });
+    notify(
+      'ACOMS Launcher update',
+      `Version ${known} is available but couldn't be downloaded. Click to open the releases page.`,
+      () => shell.openExternal(RELEASES_PAGE)
+    );
+  } else {
+    setState({
+      status: 'error',
+      message: phase === 'download' ? 'Update download failed' : 'Update check failed'
+    });
+  }
+  reportManual(phase === 'download' ? 'download-error' : 'error', detail);
+}
+
+// Answer a manually requested check exactly once.
+function reportManual(outcome) {
+  if (!manualCheckPending) return;
+  manualCheckPending = false;
+
+  if (outcome === 'uptodate') {
+    notify('ACOMS Launcher', "You're on the latest version.");
+  } else if (outcome === 'error') {
+    notify('ACOMS Launcher', 'Could not check for updates — check your internet connection.');
+  }
+  // 'available' / 'download-error' say nothing extra here: the download
+  // progress, the ready prompt, or failed()'s own notification covers it.
+}
+
 function notify(title, body, onClick) {
   if (!Notification.isSupported()) return;
   const n = new Notification({ title, body });
@@ -104,14 +171,18 @@ function isEligible() {
 function wireEvents() {
   autoUpdater.on('checking-for-update', () => {
     setState({ status: 'checking', message: 'Checking for updates…' });
+    armStallTimer();
   });
 
   autoUpdater.on('update-not-available', () => {
+    clearStallTimer();
     setState({ status: 'uptodate', newVersion: null, message: 'Up to date' });
+    reportManual('uptodate');
   });
 
   autoUpdater.on('update-available', (info) => {
     const v = (info && info.version) || null;
+    reportManual('available');
     if (CAN_SELF_INSTALL) {
       setState({
         status: 'downloading',
@@ -119,7 +190,9 @@ function wireEvents() {
         percent: 0,
         message: 'Downloading update…'
       });
+      armStallTimer();
     } else {
+      clearStallTimer();
       // Unsigned macOS: tell the person and hand them the download.
       setState({
         status: 'manual',
@@ -137,9 +210,11 @@ function wireEvents() {
   autoUpdater.on('download-progress', (p) => {
     const percent = Math.round((p && p.percent) || 0);
     setState({ status: 'downloading', percent, message: `Downloading update… ${percent}%` });
+    armStallTimer(); // progress means it's alive; restart the clock
   });
 
   autoUpdater.on('update-downloaded', (info) => {
+    clearStallTimer();
     const v = (info && info.version) || state.newVersion;
     setState({
       status: 'ready',
@@ -159,10 +234,11 @@ function wireEvents() {
 
   autoUpdater.on('error', (err) => {
     const message = (err && err.message) || String(err);
-    // A failed check is not worth interrupting anyone over — it is nearly
-    // always no internet, or the machine waking from sleep mid-request.
-    console.error('Update check failed:', message);
-    setState({ status: 'error', message: 'Update check failed' });
+    // Which half failed changes what the person can do about it, so don't
+    // flatten both into "update check failed" the way the first version did.
+    const phase = state.status === 'downloading' ? 'download' : 'check';
+    console.error(`Update ${phase} failed:`, message);
+    failed(phase, message);
   });
 }
 
@@ -178,23 +254,12 @@ function check({ manual = false } = {}) {
     return;
   }
 
-  if (manual) {
-    // checkForUpdates() resolves with info whether or not the version is
-    // newer, so read the outcome off the events instead and report once.
-    const off = onUpdateStatus((s) => {
-      if (s.status === 'checking' || s.status === 'idle') return;
-      if (s.status === 'uptodate') {
-        notify('ACOMS Launcher', "You're on the latest version.");
-      } else if (s.status === 'error') {
-        notify('ACOMS Launcher', 'Could not check for updates — check your internet connection.');
-      }
-      off();
-    });
-  }
+  // Answered once, from whichever event settles it — see reportManual.
+  if (manual) manualCheckPending = true;
 
   autoUpdater.checkForUpdates().catch((err) => {
     console.error('checkForUpdates rejected:', (err && err.message) || err);
-    setState({ status: 'error', message: 'Update check failed' });
+    failed('check', (err && err.message) || String(err));
   });
 }
 

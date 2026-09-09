@@ -269,3 +269,12 @@ body {
 .update__action--quiet:hover {
   background: rgba(0, 0, 0, 0.04);
 }
+
+.update__action:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.update__action:disabled:hover {
+  background: transparent;
+}
