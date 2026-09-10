@@ -16,6 +16,7 @@ const { app } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { isValidTime, inQuietWindow } = require('./quiet-hours');
+const { expiredSeenIds } = require('./announce-rules');
 
 const FILE = path.join(app.getPath('userData'), 'launcher-state.json');
 
@@ -25,12 +26,20 @@ const DEFAULTS = {
   // Quiet hours in local time, as "HH:MM". Null means never quiet.
   quietFrom: null,
   quietTo: null,
-  // Item ids already announced: { "<id>": <epoch ms first seen> }
-  seen: {}
+  // Item ids already announced: { "<id>": <epoch ms LAST SEEN in a payload }.
+  // Refreshed every poll while the item is still open, so the TTL below
+  // measures how long something has been GONE, not how long it has been known.
+  seen: {},
+  // Portal ids that have completed one successful poll. The first poll of a
+  // portal establishes a baseline silently — see announce-rules.js.
+  primed: []
 };
 
-// Seen ids are pruned so the file can't grow forever — an id older than this
-// is either resolved or so stale that re-announcing it is the right call.
+// Seen ids are pruned so the file can't grow forever. Because the timestamp is
+// refreshed on every poll that still returns the item, this is "absent for 30
+// days", not "known for 30 days" — a task overdue since July stays known, and
+// so stays quiet, while something genuinely resolved is eventually forgotten
+// (and would rightly be announced again if it ever came back).
 const SEEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 let state = null;
@@ -44,21 +53,21 @@ function load() {
       muted: Array.isArray(parsed.muted) ? parsed.muted.filter((m) => typeof m === 'string') : [],
       quietFrom: typeof parsed.quietFrom === 'string' ? parsed.quietFrom : null,
       quietTo: typeof parsed.quietTo === 'string' ? parsed.quietTo : null,
-      seen: parsed.seen && typeof parsed.seen === 'object' ? parsed.seen : {}
+      seen: parsed.seen && typeof parsed.seen === 'object' ? parsed.seen : {},
+      primed: Array.isArray(parsed.primed) ? parsed.primed.filter((p) => typeof p === 'string') : []
     };
     prune();
   } catch {
     // Missing or corrupt file — start clean rather than crash. The cost is
     // one duplicate round of notifications, not a broken app.
-    state = { ...DEFAULTS, muted: [], seen: {} };
+    state = { ...DEFAULTS, muted: [], seen: {}, primed: [] };
   }
   return state;
 }
 
 function prune() {
-  const cutoff = Date.now() - SEEN_TTL_MS;
-  for (const [id, at] of Object.entries(state.seen)) {
-    if (typeof at !== 'number' || at < cutoff) delete state.seen[id];
+  for (const id of expiredSeenIds(state.seen, Date.now(), SEEN_TTL_MS)) {
+    delete state.seen[id];
   }
 }
 
@@ -115,20 +124,32 @@ function inQuietHours(now = new Date()) {
   return inQuietWindow(now, s.quietFrom, s.quietTo);
 }
 
-// Which of these item ids have not been announced yet.
-function unseen(ids) {
-  const s = load();
-  return ids.filter((id) => !(id in s.seen));
-}
-
-function markSeen(ids) {
+// Record ids as announced, and refresh any that are still open. `touch` is
+// what stops a long-running item ageing out of the seen-set and coming back
+// around as though it were new.
+function recordSeen({ markSeen: mark = [], touch = [] } = {}) {
   const s = load();
   const now = Date.now();
-  for (const id of ids) {
-    if (!(id in s.seen)) s.seen[id] = now;
-  }
+  for (const id of mark) s.seen[id] = now;
+  for (const id of touch) s.seen[id] = now;
   prune();
   save();
+}
+
+function isPrimed(portalId) {
+  return load().primed.includes(portalId);
+}
+
+function markPrimed(portalId) {
+  const s = load();
+  if (!s.primed.includes(portalId)) {
+    s.primed.push(portalId);
+    save();
+  }
+}
+
+function seenMap() {
+  return load().seen;
 }
 
 module.exports = {
@@ -137,7 +158,9 @@ module.exports = {
   setQuietHours,
   isMuted,
   inQuietHours,
-  unseen,
-  markSeen,
+  recordSeen,
+  seenMap,
+  isPrimed,
+  markPrimed,
   FILE
 };

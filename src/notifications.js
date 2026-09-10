@@ -22,6 +22,7 @@
 
 const { Notification, net } = require('electron');
 const store = require('./store');
+const { decideAnnouncements } = require('./announce-rules');
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const FIRST_POLL_DELAY_MS = 8 * 1000; // let the picker paint first
@@ -143,25 +144,32 @@ function notify(portal, title, body, targetUrl) {
 // Decide what, if anything, to say about one portal's new items.
 // One new thing gets named. Several get counted — a burst of six separate
 // toasts is how a person learns to ignore them.
+//
+// The rules for WHICH ids count as new live in announce-rules.js, free of
+// Electron and unit-tested: the first poll of a portal is a silent baseline,
+// and anything still open is refreshed rather than re-announced.
 function announce(portal, result) {
   if (result.state !== 'ok') return;
-  if (store.isMuted(portal.id)) return;
 
   const actionItems = result.items.filter((i) => i && i.severity === 'action' && i.id);
-  if (actionItems.length === 0) return;
 
-  const fresh = store.unseen(actionItems.map((i) => i.id));
-  if (fresh.length === 0) return;
+  const decision = decideAnnouncements({
+    actionIds: actionItems.map((i) => i.id),
+    seen: store.seenMap(),
+    primed: store.isPrimed(portal.id),
+    // A muted portal is treated as permanently quiet: its items are still
+    // recorded, so un-muting shows what happens NEXT rather than replaying
+    // everything that piled up while it was off.
+    quiet: store.isMuted(portal.id) || store.inQuietHours(),
+    now: Date.now()
+  });
 
-  // Mark seen regardless of whether we're about to show anything: during quiet
-  // hours the person is choosing not to be told now, not asking to be told
-  // about it at 7am along with everything else that happened overnight. The
-  // badge still carries the count.
-  store.markSeen(fresh);
+  store.recordSeen(decision);
+  if (decision.baseline) store.markPrimed(portal.id);
 
-  if (store.inQuietHours()) return;
+  if (decision.announce.length === 0) return;
 
-  const freshSet = new Set(fresh);
+  const freshSet = new Set(decision.announce);
   const newItems = actionItems.filter((i) => freshSet.has(i.id));
 
   if (newItems.length === 1) {
