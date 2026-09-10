@@ -32,7 +32,10 @@ const DEFAULTS = {
   seen: {},
   // Portal ids that have completed one successful poll. The first poll of a
   // portal establishes a baseline silently — see announce-rules.js.
-  primed: []
+  primed: [],
+  // Today's rolled task-reminder times — see reminder-schedule.js. Persisted
+  // so a restart doesn't re-roll the day and fire a reminder twice.
+  reminderPlan: null
 };
 
 // Seen ids are pruned so the file can't grow forever. Because the timestamp is
@@ -54,13 +57,15 @@ function load() {
       quietFrom: typeof parsed.quietFrom === 'string' ? parsed.quietFrom : null,
       quietTo: typeof parsed.quietTo === 'string' ? parsed.quietTo : null,
       seen: parsed.seen && typeof parsed.seen === 'object' ? parsed.seen : {},
-      primed: Array.isArray(parsed.primed) ? parsed.primed.filter((p) => typeof p === 'string') : []
+      primed: Array.isArray(parsed.primed) ? parsed.primed.filter((p) => typeof p === 'string') : [],
+      reminderPlan:
+        parsed.reminderPlan && typeof parsed.reminderPlan === 'object' ? parsed.reminderPlan : null
     };
     prune();
   } catch {
     // Missing or corrupt file — start clean rather than crash. The cost is
     // one duplicate round of notifications, not a broken app.
-    state = { ...DEFAULTS, muted: [], seen: {}, primed: [] };
+    state = { ...DEFAULTS, muted: [], seen: {}, primed: [], reminderPlan: null };
   }
   return state;
 }
@@ -152,6 +157,16 @@ function seenMap() {
   return load().seen;
 }
 
+function getReminderPlan() {
+  return load().reminderPlan;
+}
+
+function setReminderPlan(plan) {
+  const s = load();
+  s.reminderPlan = plan;
+  save();
+}
+
 module.exports = {
   getSettings,
   setMuted,
@@ -162,5 +177,7 @@ module.exports = {
   seenMap,
   isPrimed,
   markPrimed,
+  getReminderPlan,
+  setReminderPlan,
   FILE
 };

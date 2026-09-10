@@ -55,6 +55,24 @@ due, that sort of thing. When something new turns up you get a normal Windows
 or macOS notification; clicking it opens that portal's window **at the
 record**, not just at the front page.
 
+### Task reminders
+
+Tasks are not like approvals. An approval arrives once and you are told once.
+A task that is due today is still due tomorrow, so tasks get **reminded**
+rather than announced: **twice a day**, once in the morning and once in the
+early afternoon, for as long as anything is overdue or due today.
+
+The times move a little each day rather than landing at the same minute
+forever — a notification that arrives at exactly 8:00 every morning stops
+being read. However many tasks are waiting, it is **one** notification: it
+names the most overdue few, counts the rest, and clicking it opens the Task
+Manager.
+
+On Windows it stays on screen until you deal with it, rather than fading after
+a few seconds. Quiet hours hold a reminder back until they end rather than
+cancelling it, and a reminder due while the machine was off arrives when you
+come back.
+
 **"New" means new since the launcher started watching.** The first time a
 portal is checked, whatever is already open is recorded quietly and you are
 not told about it — otherwise a fresh install would greet you with every

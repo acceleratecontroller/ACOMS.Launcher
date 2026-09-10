@@ -23,6 +23,13 @@
 const { Notification, net } = require('electron');
 const store = require('./store');
 const { decideAnnouncements } = require('./announce-rules');
+const {
+  planDay,
+  dueSlots,
+  planIsStale,
+  nextFireAt
+} = require('./reminder-schedule');
+const { buildTaskReminder, buildToastXml } = require('./task-reminder');
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const FIRST_POLL_DELAY_MS = 8 * 1000; // let the picker paint first
@@ -123,6 +130,10 @@ async function fetchSummary(portal) {
       badge: Number.isFinite(data.badge) ? data.badge : items.length,
       summary: typeof data.summary === 'string' ? data.summary : '',
       items,
+      // Optional per-kind totals. `items` is capped, so without these a
+      // reminder can only ever count what it can see — it says "at least"
+      // rather than stating a number that is wrong.
+      counts: data.counts && typeof data.counts === 'object' ? data.counts : null,
       at: Date.now()
     };
   } catch (err) {
@@ -206,6 +217,117 @@ async function pollOne(portal) {
   announce(portal, result);
 }
 
+// ---------------------------------------------------------------------------
+// Task reminders
+// ---------------------------------------------------------------------------
+// Approvals are events: they arrive, you are told once. Tasks are a STATE —
+// due today is still due tomorrow — so they get reminded on a clock instead,
+// twice a day, until the list is dealt with. Dion: "I want it to be annoying
+// and force me to keep these things up to date."
+//
+// The times move within a window each day rather than sitting at 08:00
+// forever, because a toast that arrives at exactly the same moment every day
+// becomes furniture. The schedule maths lives in reminder-schedule.js.
+
+let reminderTimer = null;
+
+// A portal's items are capped for payload size. If we got exactly the cap,
+// the real number may be higher — say "at least" rather than state a figure
+// that is only the part we can see.
+const ITEM_CAP_HINT = 10;
+
+function taskItemsFor(result) {
+  if (!result || result.state !== 'ok' || !Array.isArray(result.items)) return [];
+  return result.items.filter((i) => i && i.severity === 'action' && i.kind === 'task');
+}
+
+function fireTaskReminder(portal, result) {
+  const items = taskItemsFor(result);
+  if (items.length === 0) return false;
+
+  const counts = result.counts && typeof result.counts === 'object' ? result.counts : null;
+  const trueCount = counts && Number.isFinite(counts.task) ? counts.task : null;
+
+  const reminder = buildTaskReminder({
+    items,
+    trueCount,
+    capped: trueCount === null && items.length >= ITEM_CAP_HINT,
+    now: new Date()
+  });
+  if (!reminder) return false;
+
+  if (!Notification.isSupported()) return false;
+
+  const target = new URL('/tasks', portal.url).toString();
+  const n = new Notification({
+    title: reminder.title,
+    body: reminder.body,
+    // Windows only: a reminder-scenario toast stays on screen until it is
+    // dealt with, rather than filing itself away after ~25 seconds. Ignored
+    // on macOS, which falls back to title/body above.
+    toastXml:
+      process.platform === 'win32'
+        ? buildToastXml({ title: reminder.title, body: reminder.body })
+        : undefined
+  });
+  n.on('click', () => {
+    if (openPortalAt) openPortalAt(portal.id, target);
+  });
+  n.show();
+  return true;
+}
+
+// Run any reminder slot that is now owed, then arm the next one.
+async function runDueReminders() {
+  const now = new Date();
+  let plan = store.getReminderPlan();
+
+  if (planIsStale(plan, now)) {
+    plan = planDay(now);
+    store.setReminderPlan(plan);
+  }
+
+  // Quiet hours defer a reminder rather than cancelling it — otherwise the
+  // one notification meant to be unmissable is the one most easily silenced.
+  const quietUntil = store.inQuietHours(now) ? now.getTime() + 60 * 1000 : null;
+  const owed = dueSlots(plan, now, { quietUntil });
+
+  if (owed.length > 0) {
+    // Reminders must speak for the CURRENT state, not whatever the last poll
+    // happened to leave behind.
+    await pollAll();
+
+    for (const portal of portals.filter((p) => p.summary)) {
+      if (store.isMuted(portal.id)) continue;
+      fireTaskReminder(portal, results.get(portal.id));
+    }
+
+    for (const slot of owed) slot.fired = true;
+    store.setReminderPlan(plan);
+  }
+
+  armReminderTimer();
+}
+
+function armReminderTimer() {
+  if (reminderTimer) clearTimeout(reminderTimer);
+  const now = new Date();
+  const plan = store.getReminderPlan();
+
+  const at = nextFireAt(plan, now);
+  // Nothing left today: look again just after midnight to roll a fresh day.
+  const midnight = new Date(now.getTime());
+  midnight.setHours(24, 0, 30, 0);
+  const wake = at || midnight.getTime();
+
+  // setTimeout overflows past ~24.8 days; nothing here is close, but clamp
+  // anyway so a bad clock cannot turn the delay negative and spin.
+  const delay = Math.max(1000, Math.min(wake - now.getTime(), 24 * 60 * 60 * 1000));
+  reminderTimer = setTimeout(() => {
+    runDueReminders().catch(() => armReminderTimer());
+  }, delay);
+}
+
 async function pollAll() {
   const withSummary = portals.filter((p) => p.summary);
   if (withSummary.length === 0) return;
@@ -224,12 +346,18 @@ function init({ portals: list, intervalMs, openPortalAt: opener }) {
   const every = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
   setTimeout(() => pollAll(), FIRST_POLL_DELAY_MS);
   timer = setInterval(() => pollAll(), every);
+
+  // Catches up any slot missed while the machine was off, then arms the next.
+  setTimeout(() => runDueReminders().catch(() => {}), FIRST_POLL_DELAY_MS + 5000);
+
   emit();
 }
 
 function dispose() {
   if (timer) clearInterval(timer);
+  if (reminderTimer) clearTimeout(reminderTimer);
   timer = null;
+  reminderTimer = null;
   listeners = [];
 }
 
@@ -240,5 +368,6 @@ module.exports = {
   onChanged,
   snapshot,
   totalBadge,
-  resolveItemUrl
+  resolveItemUrl,
+  runDueReminders
 };
