@@ -55,6 +55,14 @@ due, that sort of thing. When something new turns up you get a normal Windows
 or macOS notification; clicking it opens that portal's window **at the
 record**, not just at the front page.
 
+**"New" means new since the launcher started watching.** The first time a
+portal is checked, whatever is already open is recorded quietly and you are
+not told about it — otherwise a fresh install would greet you with every
+approval and overdue task you already knew about. From then on you hear about
+things as they turn up. Something that stays open does not come back round and
+interrupt you a second time; if it is resolved and later raised again, that is
+a genuinely new event and you will be told.
+
 What you'll see in the picker, on the right of each portal card:
 
 | | Meaning |
