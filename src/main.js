@@ -6,6 +6,7 @@ const fs = require('fs');
 const updater = require('./updater');
 const notifications = require('./notifications');
 const chat = require('./chat');
+const popup = require('./popup');
 const store = require('./store');
 
 // ---------------------------------------------------------------------------
@@ -597,6 +598,9 @@ if (!gotLock) {
     });
     updater.init();
 
+    // The launcher's own pop-up cards. Set up first: everything below raises them.
+    popup.init();
+
     // Poll the portals that offer a summary route and raise notifications for
     // anything new. Clicking a notification opens that portal at the record.
     notifications.onChanged((snapshot) => {
@@ -643,6 +647,7 @@ if (!gotLock) {
     updater.dispose();
     notifications.dispose();
     chat.dispose();
+    popup.dispose();
   });
 }
 
