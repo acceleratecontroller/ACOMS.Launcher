@@ -219,44 +219,83 @@ function renderPortals() {
   }
 
   for (const portal of portals) {
-    const card = document.createElement('button');
-    card.className = 'card';
-    card.type = 'button';
-
-    const isOpen = openIds.has(portal.id);
-    card.title = isOpen
-      ? `${portal.name} is open — bring it to the front`
-      : `Open ${portal.name}`;
-
-    const dot = document.createElement('span');
-    dot.className = isOpen ? 'dot dot--open' : 'dot';
-
-    const badge = makeBadge(portal);
-
-    const text = document.createElement('span');
-    text.className = 'card__text';
-
-    const name = document.createElement('span');
-    name.className = 'card__name';
-    name.textContent = portal.name || portal.id;
-
-    const tagline = document.createElement('span');
-    tagline.className = 'card__tagline';
-    tagline.textContent = portal.tagline || '';
-
-    text.appendChild(name);
-    text.appendChild(tagline);
-
-    card.appendChild(text);
-    if (badge) card.appendChild(badge);
-    card.appendChild(dot);
-
-    card.addEventListener('click', () => {
-      window.acoms.openPortal(portal.id);
-    });
-
-    listEl.appendChild(card);
+    listEl.appendChild(makeCard(portal));
   }
+}
+
+// A portal's tile. Since 2026-09-22 (Dion: "open more than one window of an
+// app from the Launcher" / "split the WIP button in two — ACOMS.WIP |
+// Scheduler"):
+//   - the main half opens/focuses the portal; Shift-click opens ANOTHER window
+//   - a small "+" on the right does the same as Shift-click, for mouse users
+//   - each named view (portals.json `views`) is a further half with a dot of
+//     its own, on the Quick Note strip's split pattern
+function makeCard(portal) {
+  const views = Array.isArray(portal.views) ? portal.views : [];
+  const wrap = document.createElement('div');
+  wrap.className = views.length ? 'card card--split' : 'card';
+
+  wrap.appendChild(makeHalf(portal, null));
+  for (const view of views) wrap.appendChild(makeHalf(portal, view));
+
+  const plus = document.createElement('button');
+  plus.type = 'button';
+  plus.className = 'card__plus';
+  plus.textContent = '+';
+  plus.title = `Open another ${portal.name} window (or Shift-click the tile)`;
+  plus.setAttribute('aria-label', plus.title);
+  plus.addEventListener('click', (e) => {
+    e.stopPropagation();
+    window.acoms.openPortal(portal.id, { newWindow: true });
+  });
+  wrap.appendChild(plus);
+
+  return wrap;
+}
+
+function makeHalf(portal, view) {
+  const key = view ? `${portal.id}#${view.id}` : portal.id;
+  const label = view ? view.label : portal.name || portal.id;
+  const half = document.createElement('button');
+  half.type = 'button';
+  half.className = view ? 'card__half card__half--view' : 'card__half';
+
+  const isOpen = openIds.has(key);
+  half.title = isOpen
+    ? `${label} is open — bring it to the front (Shift-click for another window)`
+    : `Open ${label}`;
+
+  const text = document.createElement('span');
+  text.className = 'card__text';
+
+  const name = document.createElement('span');
+  name.className = 'card__name';
+  name.textContent = label;
+
+  const tagline = document.createElement('span');
+  tagline.className = 'card__tagline';
+  tagline.textContent = (view ? view.tagline : portal.tagline) || '';
+
+  text.appendChild(name);
+  text.appendChild(tagline);
+  half.appendChild(text);
+
+  if (!view) {
+    const badge = makeBadge(portal);
+    if (badge) half.appendChild(badge);
+  }
+
+  const dot = document.createElement('span');
+  dot.className = isOpen ? 'dot dot--open' : 'dot';
+  half.appendChild(dot);
+
+  half.addEventListener('click', (e) => {
+    window.acoms.openPortal(portal.id, {
+      view: view ? view.id : undefined,
+      newWindow: e.shiftKey
+    });
+  });
+  return half;
 }
 
 // The footer shows the version at all times and an action only when there is

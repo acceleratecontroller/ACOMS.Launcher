@@ -5,6 +5,14 @@ const path = require('path');
 const fs = require('fs');
 const updater = require('./updater');
 const notifications = require('./notifications');
+const {
+  windowKey,
+  normaliseViews,
+  viewUrl,
+  decideNewWindow,
+  findPortalForUrl: findPortalForUrlRule,
+  sameUrl
+} = require('./window-rules');
 const chat = require('./chat');
 const store = require('./store');
 
@@ -28,7 +36,13 @@ function loadConfig() {
     // route; a portal without one is simply never polled.
     const list = parsed.portals
       .filter((p) => p && typeof p.id === 'string' && typeof p.url === 'string')
-      .map((p) => ({ ...p, summary: typeof p.summary === 'string' ? p.summary : null }));
+      .map((p) => ({
+        ...p,
+        summary: typeof p.summary === 'string' ? p.summary : null,
+        // Optional named pages that get their own tile half and window
+        // (WIP's Scheduler). See window-rules.js.
+        views: normaliseViews(p.views)
+      }));
     // Optional Quick Note strip — two deep links into ACOMS.Controller: a
     // "new" action (compose a fresh note) and a "view" action (browse notes).
     // Older single-url configs still work as the "new" action.
@@ -73,8 +87,33 @@ let chatConfig = null;
 // ---------------------------------------------------------------------------
 let pickerWindow = null;
 let tray = null;
-// Map of portal id -> BrowserWindow for portals that are currently open.
+// Map of window KEY -> BrowserWindow[] for every open portal window. The key
+// is the portal id, or `<portal id>#<view id>` for a view's window (see
+// window-rules.js). A portal can have several windows since 2026-09-22; the
+// array is kept most-recently-focused first, so "bring WIP to the front"
+// means the WIP window you were last in.
 const portalWindows = new Map();
+
+function liveWindows(key) {
+  const wins = (portalWindows.get(key) || []).filter((w) => !w.isDestroyed());
+  if (wins.length) portalWindows.set(key, wins);
+  else portalWindows.delete(key);
+  return wins;
+}
+
+function allPortalWindows() {
+  const out = [];
+  for (const key of Array.from(portalWindows.keys())) {
+    for (const win of liveWindows(key)) out.push({ key, win });
+  }
+  return out;
+}
+
+function rememberFocus(key, win) {
+  const wins = liveWindows(key).filter((w) => w !== win);
+  wins.unshift(win);
+  portalWindows.set(key, wins);
+}
 // Dedicated Quick Note window (a single reusable scratchpad, separate from the
 // portal windows above).
 let quickNoteWindow = null;
@@ -84,8 +123,9 @@ let chatWindow = null;
 // Quick Note button while its window is open.
 const QUICK_NOTE_ID = '__quicknote__';
 
+// Keys with at least one live window (portal ids and view keys alike).
 function openPortalIds() {
-  const ids = Array.from(portalWindows.keys());
+  const ids = Array.from(portalWindows.keys()).filter((key) => liveWindows(key).length > 0);
   if (quickNoteWindow && !quickNoteWindow.isDestroyed()) {
     ids.push(QUICK_NOTE_ID);
   }
@@ -100,42 +140,34 @@ function notifyOpenStateChanged() {
   }
 }
 
-// Match a URL to one of the configured portals by host, so a cross-app link
-// (e.g. WIP linking a job into GIS) can be recognised as "one of ours".
 function findPortalForUrl(url) {
-  let host;
-  try {
-    host = new URL(url).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
-  return (
-    portals.find((p) => {
-      try {
-        return new URL(p.url).hostname.toLowerCase() === host;
-      } catch {
-        return false;
-      }
-    }) || null
-  );
+  return findPortalForUrlRule(url, portals);
 }
 
-// Decide what happens when page content tries to open a new window
-// (e.g. target="_blank" or window.open):
-//   - If the link points at one of our portals, keep it inside the launcher:
-//     open/focus that portal's window and load the linked page. This is what
-//     makes WIP -> GIS (and any portal -> portal) link switch windows instead
-//     of escaping to a browser tab.
-//   - Otherwise it's a genuinely external site, so hand it to the default
-//     browser as before.
+// What happens when page content asks for a new window (target="_blank" or
+// window.open). Until 2026-09-22 a link to one of our portals was routed INTO
+// that portal's one existing window, which is what made "Open job in WIP"
+// from the scheduler replace the board. Now (window-rules.decideNewWindow):
+// a page already showing in one of our windows is focused; any other page of
+// ours opens a brand-new window; anything else goes to the default browser.
 function handleNewWindow(url) {
-  const portal = findPortalForUrl(url);
-  if (portal) {
-    openPortal(portal.id, url);
-  } else if (url && /^https?:\/\//i.test(url)) {
-    shell.openExternal(url);
+  const open = allPortalWindows().map(({ key, win }) => ({ key, url: win.webContents.getURL() }));
+  const decision = decideNewWindow(url, portals, open);
+  if (decision.action === 'focus') {
+    const target = liveWindows(decision.key).find((w) => sameUrl(w.webContents.getURL(), url));
+    if (target) bringForward(target);
+  } else if (decision.action === 'new') {
+    openPortal(decision.portalId, decision.url, { newWindow: true });
+  } else if (decision.action === 'external') {
+    shell.openExternal(decision.url);
   }
   return { action: 'deny' };
+}
+
+function bringForward(win) {
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
 }
 
 function attachLinkHandling(contents) {
@@ -326,27 +358,37 @@ function refreshTrayMenu() {
 // Portal windows
 // ---------------------------------------------------------------------------
 // Open (or focus) a portal window.
-//   - From the picker: openPortal(id) with no targetUrl — focus the existing
-//     window untouched (never reload), matching the picker's contract.
-//   - From a cross-app link: openPortal(id, targetUrl) — focus the window AND
-//     navigate it to the linked page, so you land on the right job/record.
-function openPortal(id, targetUrl) {
+//   - From the picker: openPortal(id) with no targetUrl — focus the window
+//     you were last in, untouched (never reload), matching the picker's
+//     contract. With opts.newWindow (the tile's "+" or Shift-click) a second
+//     window opens beside it.
+//   - opts.view: one of the portal's named views (WIP's Scheduler) — its own
+//     window, keyed apart from the portal's ordinary windows, maximised if
+//     the view asks for it.
+//   - From a cross-app link / notification: openPortal(id, targetUrl) —
+//     focus the window AND navigate it to the linked page. handleNewWindow
+//     passes newWindow instead, so a link never hijacks a window.
+function openPortal(id, targetUrl, opts = {}) {
   const portal = portals.find((p) => p.id === id);
   if (!portal) {
     console.error('Unknown portal id:', id);
     return;
   }
+  const view = opts.view ? (portal.views || []).find((v) => v.id === opts.view) : null;
+  if (opts.view && !view) {
+    console.error('Unknown view', opts.view, 'for portal', id);
+    return;
+  }
+  const key = windowKey(id, view ? view.id : null);
 
-  const existing = portalWindows.get(id);
-  if (existing && !existing.isDestroyed()) {
+  const existing = liveWindows(key)[0];
+  if (existing && !opts.newWindow) {
     // Only navigate when a specific deep link was requested and it differs
     // from what's already showing; a plain picker click never reloads.
-    if (targetUrl && targetUrl !== existing.webContents.getURL()) {
+    if (targetUrl && !sameUrl(targetUrl, existing.webContents.getURL())) {
       existing.loadURL(targetUrl);
     }
-    if (existing.isMinimized()) existing.restore();
-    existing.show();
-    existing.focus();
+    bringForward(existing);
     hidePicker();
     return;
   }
@@ -354,7 +396,7 @@ function openPortal(id, targetUrl) {
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
-    title: portal.name,
+    title: view ? `${portal.name} — ${view.label}` : portal.name,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -363,14 +405,16 @@ function openPortal(id, targetUrl) {
   });
 
   attachLinkHandling(win.webContents);
-  win.loadURL(targetUrl || portal.url);
+  win.loadURL(targetUrl || (view ? viewUrl(portal, view) : portal.url));
+  if (view && view.maximize) win.maximize();
 
-  portalWindows.set(id, win);
+  rememberFocus(key, win);
   notifyOpenStateChanged();
   hidePicker();
 
+  win.on('focus', () => rememberFocus(key, win));
   win.on('closed', () => {
-    portalWindows.delete(id);
+    liveWindows(key);
     notifyOpenStateChanged();
   });
 }
@@ -502,8 +546,9 @@ ipcMain.handle('portals:get', () => ({
   quickNoteId: QUICK_NOTE_ID
 }));
 
-ipcMain.handle('portal:open', (_event, id) => {
-  openPortal(id);
+// opts: { view?: string, newWindow?: boolean } — see openPortal.
+ipcMain.handle('portal:open', (_event, id, opts) => {
+  openPortal(id, undefined, opts && typeof opts === 'object' ? opts : {});
 });
 
 ipcMain.handle('quicknote:open', (_event, action) => {

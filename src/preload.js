@@ -9,7 +9,10 @@ contextBridge.exposeInMainWorld('acoms', {
   getPortals: () => ipcRenderer.invoke('portals:get'),
 
   // Ask the main process to open (or focus, if already open) a portal.
-  openPortal: (id) => ipcRenderer.invoke('portal:open', id),
+  // opts: { view?: string, newWindow?: boolean } — a named view (WIP's
+  // Scheduler) gets its own window; newWindow opens another window beside
+  // whatever is open instead of focusing it.
+  openPortal: (id, opts) => ipcRenderer.invoke('portal:open', id, opts || {}),
 
   // Open (or focus) the Quick Notes window. action is 'new' or 'view'.
   openQuickNote: (action) => ipcRenderer.invoke('quicknote:open', action),
