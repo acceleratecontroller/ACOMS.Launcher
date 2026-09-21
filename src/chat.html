@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Same lock-down as the picker: our own files only, no remote loads. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:;"
+    />
+    <title>ACOMS Chat</title>
+    <link rel="stylesheet" href="chat.css" />
+  </head>
+  <body>
+    <aside class="side">
+      <header class="side__header">
+        <h1>Chat</h1>
+        <p id="me" class="side__me"></p>
+      </header>
+      <nav id="people" class="people" aria-label="People">
+        <!-- Rendered by chat-window.js -->
+      </nav>
+    </aside>
+
+    <main class="thread">
+      <header id="thread-header" class="thread__header"></header>
+      <div id="notice" class="notice" hidden></div>
+      <div id="messages" class="messages" aria-live="polite"></div>
+      <form id="composer" class="composer" hidden>
+        <textarea
+          id="input"
+          class="composer__input"
+          rows="1"
+          maxlength="4000"
+          placeholder="Write a message — Enter to send, Shift+Enter for a new line"
+        ></textarea>
+        <button id="send" class="composer__send" type="submit">Send</button>
+      </form>
+      <p id="send-error" class="send-error" hidden></p>
+    </main>
+
+    <script src="chat-window.js"></script>
+  </body>
+</html>

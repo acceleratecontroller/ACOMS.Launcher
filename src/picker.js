@@ -9,6 +9,8 @@ const updateSlot = document.getElementById('update-slot');
 const subtitleEl = document.getElementById('subtitle');
 const settingsPanel = document.getElementById('settings-panel');
 const settingsToggle = document.getElementById('settings-toggle');
+const chatOpen = document.getElementById('chat-open');
+const chatUnread = document.getElementById('chat-unread');
 
 let portals = [];
 let quickNote = null;
@@ -312,6 +314,18 @@ function renderUpdate() {
   updateSlot.appendChild(btn);
 }
 
+// The chat button only exists when portals.json sets chat up, and carries the
+// unread count. A signed-out or unreachable chat still opens — the chat window
+// is where that gets explained and fixed.
+function renderChatBadge(badge) {
+  const b = badge || {};
+  chatOpen.hidden = !b.enabled;
+  const n = b.unreadTotal || 0;
+  chatUnread.hidden = n === 0;
+  chatUnread.textContent = n > 99 ? '99+' : String(n);
+  chatOpen.title = n > 0 ? `Chat — ${n} unread` : 'Chat';
+}
+
 function render() {
   renderQuickNote();
   renderPortals();
@@ -339,6 +353,10 @@ async function init() {
     settingsToggle.setAttribute('aria-expanded', String(opening));
     if (opening) renderSettings();
   });
+
+  chatOpen.addEventListener('click', () => window.acoms.openChat());
+  renderChatBadge(await window.acoms.getChatBadge());
+  window.acoms.onChatBadgeChanged(renderChatBadge);
 
   render();
 
