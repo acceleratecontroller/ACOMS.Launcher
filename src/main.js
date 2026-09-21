@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const updater = require('./updater');
 const notifications = require('./notifications');
+const chat = require('./chat');
 const store = require('./store');
 
 // ---------------------------------------------------------------------------
@@ -49,15 +50,23 @@ function loadConfig() {
         };
       }
     }
-    return { portals: list, quickNote: qn };
+    // Optional chat block: which portal hosts the chat routes. No block, no
+    // chat — the picker simply doesn't offer it.
+    const chatRaw = parsed.chat;
+    const chatCfg =
+      chatRaw && typeof chatRaw === 'object' && typeof chatRaw.portal === 'string'
+        ? { portal: chatRaw.portal, sync: typeof chatRaw.sync === 'string' ? chatRaw.sync : undefined }
+        : null;
+    return { portals: list, quickNote: qn, chat: chatCfg };
   } catch (err) {
     console.error('Failed to load portals.json:', err.message);
-    return { portals: [], quickNote: null };
+    return { portals: [], quickNote: null, chat: null };
   }
 }
 
 let portals = [];
 let quickNote = null;
+let chatConfig = null;
 
 // ---------------------------------------------------------------------------
 // Window bookkeeping
@@ -69,6 +78,8 @@ const portalWindows = new Map();
 // Dedicated Quick Note window (a single reusable scratchpad, separate from the
 // portal windows above).
 let quickNoteWindow = null;
+// The chat window — one, reused.
+let chatWindow = null;
 // Sentinel id included in the "open" list so the picker can show a dot on the
 // Quick Note button while its window is open.
 const QUICK_NOTE_ID = '__quicknote__';
@@ -254,8 +265,12 @@ function createTray() {
 function refreshTrayTooltip() {
   if (!tray || tray.isDestroyed()) return;
   const badge = notifications.totalBadge();
+  const unread = chat.unreadTotal();
+  const parts = [];
+  if (badge > 0) parts.push(`${badge} waiting on you`);
+  if (unread > 0) parts.push(`${unread} unread ${unread === 1 ? 'message' : 'messages'}`);
   tray.setToolTip(
-    badge > 0 ? `ACOMS Launcher — ${badge} waiting on you` : `ACOMS Launcher ${app.getVersion()}`
+    parts.length > 0 ? `ACOMS Launcher — ${parts.join(', ')}` : `ACOMS Launcher ${app.getVersion()}`
   );
 }
 
@@ -274,6 +289,14 @@ function refreshTrayMenu() {
       enabled: false
     },
     { label: 'Check portals now', click: () => notifications.pollAll() },
+    ...(chatConfig
+      ? [
+          {
+            label: chat.unreadTotal() > 0 ? `Chat — ${chat.unreadTotal()} unread` : 'Chat',
+            click: () => openChat()
+          }
+        ]
+      : []),
     { type: 'separator' },
     { label: `Version ${u.version}`, enabled: false }
   ];
@@ -399,6 +422,69 @@ function openQuickNote(action) {
 }
 
 // ---------------------------------------------------------------------------
+// Chat window
+// ---------------------------------------------------------------------------
+// A local page (chat.html), not a portal: it gets its own preload and talks
+// only to chat.js over IPC. Opened from the picker, the tray, or by clicking a
+// message notification — which passes the conversation to land on.
+function reportChatWindow() {
+  const open = Boolean(chatWindow && !chatWindow.isDestroyed() && chatWindow.isVisible());
+  chat.setWindowState({
+    open: open && !chatWindow.isMinimized(),
+    focused: open && chatWindow.isFocused()
+  });
+}
+
+// All the picker gets: enough for a button and a number, no message text.
+function chatBadge() {
+  const { status, unreadTotal } = chat.snapshot();
+  return { enabled: Boolean(chatConfig), status, unreadTotal };
+}
+
+function openChat(conversationId) {
+  if (!chatConfig) return;
+  if (conversationId) chat.selectConversation(conversationId);
+
+  if (chatWindow && !chatWindow.isDestroyed()) {
+    if (chatWindow.isMinimized()) chatWindow.restore();
+    chatWindow.show();
+    chatWindow.focus();
+    hidePicker();
+    return;
+  }
+
+  chatWindow = new BrowserWindow({
+    width: 820,
+    height: 640,
+    minWidth: 560,
+    minHeight: 400,
+    title: 'ACOMS Chat',
+    webPreferences: {
+      preload: path.join(__dirname, 'chat-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+
+  // Links in messages open like any other link: a portal's in its window,
+  // anything else in the browser. The chat page itself never navigates away.
+  attachLinkHandling(chatWindow.webContents);
+  chatWindow.webContents.on('will-navigate', (event) => event.preventDefault());
+  chatWindow.loadFile(path.join(__dirname, 'chat.html'));
+
+  for (const evt of ['focus', 'blur', 'show', 'hide', 'minimize', 'restore']) {
+    chatWindow.on(evt, reportChatWindow);
+  }
+  chatWindow.on('closed', () => {
+    chatWindow = null;
+    reportChatWindow();
+  });
+
+  hidePicker();
+}
+
+// ---------------------------------------------------------------------------
 // IPC (renderer <-> main)
 // ---------------------------------------------------------------------------
 ipcMain.handle('portals:get', () => ({
@@ -434,6 +520,19 @@ ipcMain.handle('notifications:open', (_event, portalId, itemPath) => {
   const portal = portals.find((p) => p.id === portalId);
   if (!portal) return;
   openPortal(portalId, notifications.resolveItemUrl(portal, { path: itemPath }));
+});
+
+// Chat. The picker only needs to know whether to offer it and how many are
+// unread; everything else is the chat window's.
+ipcMain.handle('chat:open', () => openChat());
+ipcMain.handle('chat:badge', () => chatBadge());
+ipcMain.handle('chat:get', () => chat.snapshot());
+ipcMain.handle('chat:select-conversation', (_event, id) => chat.selectConversation(id));
+ipcMain.handle('chat:select-person', (_event, id) => chat.selectPerson(id));
+ipcMain.handle('chat:send', (_event, text) => chat.send(text));
+ipcMain.handle('chat:retry', () => chat.pollNow());
+ipcMain.handle('chat:sign-in', () => {
+  if (chatConfig) openPortal(chatConfig.portal);
 });
 
 ipcMain.handle('settings:get', () => store.getSettings());
@@ -486,6 +585,7 @@ if (!gotLock) {
     const cfg = loadConfig();
     portals = cfg.portals;
     quickNote = cfg.quickNote;
+    chatConfig = cfg.chat;
     createTray();
 
     // Keep the tray menu and the picker footer in step with the updater.
@@ -502,7 +602,7 @@ if (!gotLock) {
     notifications.onChanged((snapshot) => {
       refreshTrayTooltip();
       refreshTrayMenu();
-      app.setBadgeCount(notifications.totalBadge()); // macOS dock; no-op on Windows
+      app.setBadgeCount(notifications.totalBadge() + chat.unreadTotal()); // macOS dock; no-op on Windows
       if (pickerWindow && !pickerWindow.isDestroyed()) {
         pickerWindow.webContents.send('notifications:changed', snapshot);
       }
@@ -510,6 +610,25 @@ if (!gotLock) {
     notifications.init({
       portals,
       openPortalAt: (portalId, url) => openPortal(portalId, url)
+    });
+
+    // Chat: same session, same cookie. Its state goes to the chat window in
+    // full and to the picker for its unread badge.
+    chat.onChanged((snapshot) => {
+      refreshTrayTooltip();
+      refreshTrayMenu();
+      app.setBadgeCount(notifications.totalBadge() + chat.unreadTotal());
+      if (chatWindow && !chatWindow.isDestroyed()) {
+        chatWindow.webContents.send('chat:changed', snapshot);
+      }
+      if (pickerWindow && !pickerWindow.isDestroyed()) {
+        pickerWindow.webContents.send('chat:badge-changed', chatBadge());
+      }
+    });
+    chat.init({
+      portals,
+      config: chatConfig,
+      openChat: (conversationId) => openChat(conversationId)
     });
 
     showPicker();
@@ -523,6 +642,7 @@ if (!gotLock) {
   app.on('before-quit', () => {
     updater.dispose();
     notifications.dispose();
+    chat.dispose();
   });
 }
 

@@ -57,6 +57,16 @@ contextBridge.exposeInMainWorld('acoms', {
     return () => ipcRenderer.removeListener('notifications:changed', listener);
   },
 
+  // Chat lives in its own window; the picker only opens it and shows how many
+  // messages are unread. { enabled, status, unreadTotal }
+  openChat: () => ipcRenderer.invoke('chat:open'),
+  getChatBadge: () => ipcRenderer.invoke('chat:badge'),
+  onChatBadgeChanged: (callback) => {
+    const listener = (_event, badge) => callback(badge);
+    ipcRenderer.on('chat:badge-changed', listener);
+    return () => ipcRenderer.removeListener('chat:badge-changed', listener);
+  },
+
   // { muted: string[], quietFrom: "HH:MM"|null, quietTo: "HH:MM"|null }
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setMuted: (portalId, muted) => ipcRenderer.invoke('settings:set-muted', portalId, muted),

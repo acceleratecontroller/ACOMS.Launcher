@@ -3,6 +3,11 @@
   "_summaryComment": "'summary' is optional: the path to that portal's GET /api/launcher/summary route. A portal with one is polled for things waiting on you and can raise notifications; a portal without one is just a link, exactly as before. Add the key as each app grows the route.",
   "_doubleCheckUrls": "NOTE: the email, gis and controller URLs below were guessed during setup. Please double-check that acoms-email, acoms-gis and acoms-controller point at the right deployments before trusting them.",
   "_quickNoteComment": "The Quick Note strip has two halves. 'new' jumps to a fresh note (compose=1); 'view' opens the Quick Notes list. Both need the matching Controller update deployed. Change the base URLs here if Controller moves.",
+  "_chatComment": "'chat' is optional: which portal hosts the chat routes (POST <sync> is what the launcher polls). Remove the block and the launcher simply has no chat.",
+  "chat": {
+    "portal": "acoms-controller",
+    "sync": "/api/chat/sync"
+  },
   "quickNote": {
     "tagline": "Jot or browse Controller notes",
     "new": {

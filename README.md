@@ -114,6 +114,40 @@ Both settings live on your machine, in the app's own data folder.
 
 ---
 
+## Chat
+
+The 💬 button at the top of the picker opens a chat window: everyone else who
+runs the launcher is listed down the left with a green dot when they are
+online, and you message them one to one. A number on the button (and in the
+tray tooltip) is how many messages you haven't read.
+
+When someone writes to you a notification pops up; clicking it opens the chat
+at that conversation. Messages left while your launcher was closed are summed
+up in one notification when it next starts. The conversation you are actually
+looking at never notifies — but it does if the chat window is merely open
+behind something else.
+
+**Chat is not optional.** If you have the launcher, you are on chat: there is no
+setting to leave it, and the mute list and quiet hours under ⚙ do not apply to
+messages from people (they still apply to portal notifications). Windows' and
+macOS's own Do Not Disturb still does, because that belongs to the operating
+system.
+
+Where it lives: the launcher has no server of its own, so conversations are
+stored in ACOMS.Controller and the launcher is a client of its `/api/chat/*`
+routes, signed in as you by the same Controller login the portal window uses.
+You appear in other people's lists the first time your launcher runs while you
+are signed in to Controller — if chat says **Sign in**, that is what it needs.
+Only the people in a conversation can read it. Nothing anyone types is written
+to disk on your computer; the launcher re-reads conversations from the server.
+
+It checks for new messages every 3 seconds while you are in the chat window,
+every 8 while it is open but behind something, and every 20 in the background.
+
+Links in a message are clickable, and a link to an ACOMS portal opens in that
+portal's window like any other cross-portal link — paste a job's address to
+point someone at it.
+
 ## Updates
 
 The launcher keeps itself current. It checks shortly after startup, every
