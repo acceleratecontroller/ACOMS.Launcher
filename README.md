@@ -155,8 +155,9 @@ are signed in to Controller — if chat says **Sign in**, that is what it needs.
 Only the people in a conversation can read it. Nothing anyone types is written
 to disk on your computer; the launcher re-reads conversations from the server.
 
-It checks for new messages every 3 seconds while you are in the chat window,
-every 8 while it is open but behind something, and every 20 in the background.
+It checks for new messages every 3 seconds while you are in the chat window
+and every 5 otherwise, so a message reaches the other person within about five
+seconds whatever they are doing.
 
 Links in a message are clickable, and a link to an ACOMS portal opens in that
 portal's window like any other cross-portal link — paste a job's address to

@@ -29,6 +29,11 @@ test('polls fastest when the chat window is focused, slowest in the background',
   assert.strictEqual(pollIntervalMs({ windowOpen: true, windowFocused: true }), POLL_FOCUSED_MS);
   assert.strictEqual(pollIntervalMs({ windowOpen: true, windowFocused: false }), POLL_OPEN_MS);
   assert.strictEqual(pollIntervalMs({ windowOpen: false }), POLL_BACKGROUND_MS);
+  assert.ok(POLL_FOCUSED_MS <= POLL_OPEN_MS && POLL_OPEN_MS <= POLL_BACKGROUND_MS);
+});
+
+test('a closed window is never more than five seconds behind (v1.0.9: was twenty)', () => {
+  assert.ok(POLL_BACKGROUND_MS <= 5000);
 });
 
 test('backs off when signed out or erroring, even with the window focused', () => {
