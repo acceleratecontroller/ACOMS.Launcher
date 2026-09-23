@@ -21,7 +21,8 @@
 // in memory and re-read from the server; nothing of what people say to each
 // other is written to launcher-state.json.
 
-const { Notification, net } = require('electron');
+const { net } = require('electron');
+const popup = require('./popup');
 const {
   pollIntervalMs,
   decideMessageToasts,
@@ -71,9 +72,6 @@ let timer = null;
 let polling = false;
 let listeners = [];
 const handledIds = new Set();
-// A Notification with no live reference can be collected before it is clicked,
-// taking its click handler with it.
-const liveToasts = new Set();
 
 function snapshot() {
   return {
@@ -166,18 +164,21 @@ async function request(path, { method = 'GET', body } = {}) {
 
 // ── Notifications ──────────────────────────────────────────────────────────
 
+// The launcher's own pop-up card, not an OS notification — see popup.js.
 function toast(text) {
-  if (!text || !Notification.isSupported()) return;
-  const n = new Notification({ title: text.title, body: text.body });
-  liveToasts.add(n);
-  const release = () => liveToasts.delete(n);
-  n.on('click', () => {
-    release();
-    if (openChatWindow) openChatWindow(text.conversationId);
+  if (!text) return;
+  popup.show({
+    kind: 'chat',
+    label: 'ACOMS Chat',
+    title: text.title,
+    body: text.body,
+    // One card per conversation: a second message from the same person
+    // replaces their card rather than stacking another under it.
+    key: `chat:${text.conversationId}`,
+    onClick: () => {
+      if (openChatWindow) openChatWindow(text.conversationId);
+    }
   });
-  n.on('close', release);
-  n.on('failed', release);
-  n.show();
 }
 
 function rememberHandled(ids) {
