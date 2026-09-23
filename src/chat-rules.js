@@ -7,11 +7,17 @@
 // how often to poll, what deserves a notification, and what it should say.
 
 // Polling is the whole transport, so the interval IS the latency. Fast while
-// someone is looking at a conversation, slower when the window is merely open,
-// slowest in the background — where the only job is raising a notification.
+// someone is looking at a conversation, a little slower otherwise. The
+// background rate was 20 s until v1.0.9: with the window closed — which is
+// nearly always — a message could sit for twenty seconds before the other
+// person's launcher even looked, and Dion noticed. 5 s is about a million
+// requests a month across five people, which the server absorbs; real push
+// (a pub/sub service, polling as the safety net) is the answer if this is
+// ever not enough. The open-but-unfocused rate matches: it made no sense for a
+// window somewhere behind a portal to check LESS often than no window at all.
 const POLL_FOCUSED_MS = 3 * 1000;
-const POLL_OPEN_MS = 8 * 1000;
-const POLL_BACKGROUND_MS = 20 * 1000;
+const POLL_OPEN_MS = 5 * 1000;
+const POLL_BACKGROUND_MS = 5 * 1000;
 // After a failure, don't hammer a server that is down or a session that has
 // expired; the picker shows the state in the meantime.
 const POLL_TROUBLE_MS = 60 * 1000;
