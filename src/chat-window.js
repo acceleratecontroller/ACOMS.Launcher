@@ -18,9 +18,6 @@ const pendingEl = document.getElementById('pending');
 const attachEl = document.getElementById('attach');
 const fileInputEl = document.getElementById('file-input');
 const dropEl = document.getElementById('drop');
-const viewerEl = document.getElementById('viewer');
-const viewerImgEl = document.getElementById('viewer-img');
-const viewerNameEl = document.getElementById('viewer-name');
 const Files = window.acomsChatFiles;
 
 let state = null;
@@ -205,7 +202,9 @@ function renderAttachments(files, mine) {
         btn.replaceChildren(el('span', 'thumb__broken', 'Picture unavailable'));
       });
       btn.append(img);
-      btn.addEventListener('click', () => openViewer(f));
+      // Opens in a window of its own, nearly full screen on the chat's monitor,
+      // so a small chat window doesn't mean a small picture (Dion, 2026-09-25).
+      btn.addEventListener('click', () => window.acomsChat.viewImage({ id: f.id, name: f.name }));
       grid.append(btn);
     }
     wrap.append(grid);
@@ -249,41 +248,6 @@ function showLocalError(text) {
   }, 6000);
   render();
 }
-
-// ── The picture viewer ─────────────────────────────────────────────────────
-// Click a thumbnail: the picture fills the window. Esc, ✕ or a click on the
-// dark surround closes it.
-
-let viewing = null;
-
-function openViewer(file) {
-  viewing = file;
-  viewerNameEl.textContent = file.name;
-  viewerImgEl.alt = file.name;
-  viewerImgEl.src = fileUrl(file);
-  viewerEl.hidden = false;
-}
-
-function closeViewer() {
-  viewing = null;
-  viewerEl.hidden = true;
-  viewerImgEl.removeAttribute('src');
-}
-
-viewerEl.addEventListener('click', (event) => {
-  // Anywhere but the button bar closes it, the picture included.
-  if (!event.target.closest('.viewer__bar')) closeViewer();
-});
-document.getElementById('viewer-close').addEventListener('click', closeViewer);
-document.getElementById('viewer-open').addEventListener('click', () => {
-  if (viewing) fileAction('openFile', viewing);
-});
-document.getElementById('viewer-save').addEventListener('click', () => {
-  if (viewing) fileAction('saveFile', viewing);
-});
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !viewerEl.hidden) closeViewer();
-});
 
 function renderMessages() {
   const msgs = state.activeMessages;

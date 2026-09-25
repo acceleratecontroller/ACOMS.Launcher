@@ -11,7 +11,8 @@ const {
   viewUrl,
   decideNewWindow,
   findPortalForUrl: findPortalForUrlRule,
-  sameUrl
+  sameUrl,
+  viewerBounds
 } = require('./window-rules');
 const chat = require('./chat');
 const chatFiles = require('./chat-files');
@@ -565,6 +566,53 @@ async function runFileAction(fn) {
   }
 }
 
+// The picture viewer — one window, reused. Opened by clicking a picture in
+// chat; nearly full screen on the monitor the chat window is on, so a small
+// chat window no longer means a small picture.
+let viewerWindow = null;
+let viewerReady = false;
+let viewerFile = null;
+
+function openImageViewer(file) {
+  viewerFile = file;
+
+  if (viewerWindow && !viewerWindow.isDestroyed()) {
+    if (viewerReady) viewerWindow.webContents.send('viewer:show', file);
+    if (viewerWindow.isMinimized()) viewerWindow.restore();
+    viewerWindow.show();
+    viewerWindow.focus();
+    return;
+  }
+
+  const near =
+    chatWindow && !chatWindow.isDestroyed()
+      ? screen.getDisplayMatching(chatWindow.getBounds())
+      : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+
+  viewerReady = false;
+  viewerWindow = new BrowserWindow({
+    ...viewerBounds(near.workArea),
+    minWidth: 400,
+    minHeight: 300,
+    title: file.name,
+    backgroundColor: '#05080b',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'image-viewer-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  viewerWindow.webContents.on('will-navigate', (event) => event.preventDefault());
+  viewerWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  viewerWindow.loadFile(path.join(__dirname, 'image-viewer.html'));
+  viewerWindow.on('closed', () => {
+    viewerWindow = null;
+    viewerReady = false;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // IPC (renderer <-> main)
 // ---------------------------------------------------------------------------
@@ -617,6 +665,22 @@ ipcMain.handle('chat:send', (_event, text, files) => chat.send(text, cleanOutgoi
 ipcMain.handle('chat:open-file', (_event, file) => runFileAction(() => chatFiles.open(attachmentArg(file))));
 ipcMain.handle('chat:save-file', (_event, file) =>
   runFileAction(() => chatFiles.save(attachmentArg(file), chatWindow))
+);
+ipcMain.handle('chat:view-image', (_event, file) => {
+  openImageViewer(attachmentArg(file));
+});
+// The viewer page says when it can listen; the picture is sent then (and
+// directly on later clicks, since the window is reused).
+ipcMain.on('viewer:ready', (event) => {
+  if (!viewerWindow || event.sender !== viewerWindow.webContents) return;
+  viewerReady = true;
+  if (viewerFile) viewerWindow.webContents.send('viewer:show', viewerFile);
+});
+ipcMain.on('viewer:close', (event) => {
+  if (viewerWindow && event.sender === viewerWindow.webContents) viewerWindow.close();
+});
+ipcMain.handle('viewer:save-file', (_event, file) =>
+  runFileAction(() => chatFiles.save(attachmentArg(file), viewerWindow))
 );
 ipcMain.handle('chat:clipboard-files', () => chatFiles.clipboardFiles());
 ipcMain.handle('chat:read-clipboard-file', (_event, filePath) =>

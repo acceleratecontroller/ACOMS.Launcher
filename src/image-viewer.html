@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Same lock-down as chat: our own files, and pictures from acoms-file:
+         (answered by the main process, chat-files.js). -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'; img-src acoms-file:;"
+    />
+    <title>Picture</title>
+    <link rel="stylesheet" href="image-viewer.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <span id="name" class="bar__name"></span>
+      <span id="zoom" class="bar__zoom"></span>
+      <button id="fit" class="bar__btn" type="button" title="Fit to window (0)">Fit</button>
+      <button id="actual" class="bar__btn" type="button" title="Actual size (1)">100%</button>
+      <button id="open" class="bar__btn" type="button" title="Open in the computer's picture viewer">Open</button>
+      <button id="save" class="bar__btn" type="button">Save as…</button>
+      <button id="close" class="bar__btn" type="button" title="Close (Esc)" aria-label="Close">✕</button>
+    </header>
+    <main id="stage" class="stage">
+      <img id="img" class="img" alt="" draggable="false" />
+      <p id="status" class="status" hidden></p>
+    </main>
+    <script src="image-viewer.js"></script>
+  </body>
+</html>

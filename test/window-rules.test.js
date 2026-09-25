@@ -87,3 +87,18 @@ test('same page: trailing slash and fragment do not count, the path does', () =>
   assert.ok(!sameUrl('https://a.b/c', 'https://a.b/c?d=1'));
   assert.ok(!sameUrl('https://a.b/c', 'https://a.b/d'));
 });
+
+test('the picture viewer takes nearly the whole screen it opens on, centred', () => {
+  const { viewerBounds } = require('../src/window-rules');
+  // A 1920x1080 screen with a 48px taskbar at the bottom.
+  assert.deepEqual(viewerBounds({ x: 0, y: 0, width: 1920, height: 1032 }), {
+    x: 77,
+    y: 42,
+    width: 1766,
+    height: 949
+  });
+  // A second monitor to the right keeps its own offset.
+  const b = viewerBounds({ x: 1920, y: 0, width: 2560, height: 1400 });
+  assert.equal(b.x, 1920 + Math.round((2560 - b.width) / 2));
+  assert.ok(b.x >= 1920 && b.x + b.width <= 1920 + 2560);
+});

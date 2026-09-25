@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('acomsChat', {
   // A file in a message ({ id, name }): open it with the computer's own app,
   // or save a copy. Resolve to { ok, error? }.
   openFile: (file) => ipcRenderer.invoke('chat:open-file', file),
+  // A picture ({ id, name }) in the viewer window, nearly full screen.
+  viewImage: (file) => ipcRenderer.invoke('chat:view-image', file),
   saveFile: (file) => ipcRenderer.invoke('chat:save-file', file),
 
   // Files copied in Explorer, for a Ctrl+V the paste event didn't carry.
