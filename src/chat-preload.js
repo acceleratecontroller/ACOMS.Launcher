@@ -19,6 +19,21 @@ contextBridge.exposeInMainWorld('acomsChat', {
 
   selectConversation: (conversationId) => ipcRenderer.invoke('chat:select-conversation', conversationId),
   selectPerson: (identityId) => ipcRenderer.invoke('chat:select-person', identityId),
+  // A search result: open its conversation scrolled to it ({ id, createdAt }).
+  openAt: (conversationId, message) => ipcRenderer.invoke('chat:open-at', conversationId, message),
+
+  // Your own messages. Resolve to { ok, error? }.
+  editMessage: (id, text) => ipcRenderer.invoke('chat:edit', id, text),
+  deleteMessage: (id) => ipcRenderer.invoke('chat:delete', id),
+
+  // Called on each keystroke; the main process decides when to tell the server.
+  typing: () => ipcRenderer.send('chat:typing'),
+
+  // Your chat history. Resolves to { ok, results: [message], error? }.
+  search: (q) => ipcRenderer.invoke('chat:search', q),
+
+  // What WIP says about job numbers ["A1174"] — [{ number, found, name, … }].
+  jobCards: (numbers) => ipcRenderer.invoke('chat:job-cards', numbers),
 
   // Resolves to { ok: boolean }; a failure's reason arrives as state.sendError.
   // files: [{ name, type, data: ArrayBuffer }] — uploaded by the main process.
@@ -27,6 +42,8 @@ contextBridge.exposeInMainWorld('acomsChat', {
   // A file in a message ({ id, name }): open it with the computer's own app,
   // or save a copy. Resolve to { ok, error? }.
   openFile: (file) => ipcRenderer.invoke('chat:open-file', file),
+  // A picture ({ id, name }) in the viewer window, nearly full screen.
+  viewImage: (file) => ipcRenderer.invoke('chat:view-image', file),
   saveFile: (file) => ipcRenderer.invoke('chat:save-file', file),
 
   // Files copied in Explorer, for a Ctrl+V the paste event didn't carry.

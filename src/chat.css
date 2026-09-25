@@ -600,57 +600,302 @@ body {
   font-weight: 600;
 }
 
-/* ── Picture viewer ───────────────────────────────────────────────────── */
-.viewer {
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  background: rgba(5, 8, 11, 0.96);
-  cursor: zoom-out;
+/* ── Search ───────────────────────────────────────────────────────────── */
+.search {
+  position: relative;
+  margin-top: 10px;
 }
 
-.viewer[hidden] {
-  display: none;
-}
-
-.viewer__bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  cursor: default;
-}
-
-.viewer__name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted);
-}
-
-.viewer__btn {
+.search__input {
+  width: 100%;
   height: 32px;
-  padding: 0 12px;
+  padding: 0 28px 0 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--card);
   color: var(--text);
   font: inherit;
-  cursor: pointer;
+  font-size: 13px;
+  outline: none;
 }
 
-.viewer__btn:hover {
+.search__input:focus {
   border-color: var(--accent);
 }
 
-.viewer__img {
-  flex: 1;
-  min-height: 0;
+/* Chromium's own clear button; ours matches the rest of the app. */
+.search__input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.search__clear {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.search__clear[hidden] {
+  display: none;
+}
+
+.search__clear:hover {
+  color: var(--text);
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   width: 100%;
-  padding: 0 20px 20px;
-  object-fit: contain;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.result:hover {
+  background: var(--card-hover);
+}
+
+.result__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.result__who {
+  font-weight: 600;
+}
+
+.result__when {
+  flex: none;
+  color: var(--muted);
+}
+
+.result__text {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+
+.result__text mark {
+  border-radius: 3px;
+  background: rgba(59, 130, 246, 0.35);
+  color: var(--text);
+}
+
+/* A search result opened: the message flashes once. */
+.msg--flash {
+  animation: flash 1.6s ease-out;
+}
+
+@keyframes flash {
+  0%,
+  35% {
+    box-shadow: 0 0 0 3px #facc15;
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
+/* ── Typing ───────────────────────────────────────────────────────────── */
+.thread__status--typing,
+.person__last--typing {
+  color: #4ade80;
+  font-style: italic;
+}
+
+/* ── Edit / delete ────────────────────────────────────────────────────── */
+.msg {
+  position: relative;
+}
+
+/* Edit and Delete sit just outside my bubble, on the left, on hover. */
+.msg__actions {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 6px);
+  display: none;
+  gap: 2px;
+  transform: translateY(-50%);
+}
+
+.msg:hover .msg__actions {
+  display: flex;
+}
+
+.msg__action {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.msg__action:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.msg__edited {
+  margin-right: 5px;
+  font-style: italic;
+  opacity: 0.65;
+}
+
+.msg--deleted {
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+}
+
+.msg--deleted .msg__body {
+  font-style: italic;
+}
+
+.msg--editing {
+  width: min(520px, 100%);
+  max-width: 100%;
+}
+
+.msg__edit-input {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+  outline: none;
+}
+
+.msg__edit-buttons,
+.msg__confirm {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.msg__edit-hint {
+  margin-right: auto;
+  opacity: 0.7;
+}
+
+.msg__confirm-yes,
+.msg__confirm-no {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.msg__confirm .msg__confirm-yes {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #fff;
+}
+
+.msg__edit-buttons .msg__confirm-yes {
+  background: #fff;
+  color: #1e3a8a;
+  font-weight: 600;
+}
+
+/* ── Job cards ────────────────────────────────────────────────────────── */
+.jobs {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 6px 0 2px;
+}
+
+.job {
+  display: block;
+  min-width: 240px;
+  padding: 8px 10px;
+  border-left: 3px solid #f59e0b;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  color: inherit;
+  text-decoration: none;
+}
+
+a.job:hover {
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.job--loading {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.job__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.job__number {
+  font-weight: 700;
+}
+
+.job__stage {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 11px;
+}
+
+.job__stage--hold {
+  background: rgba(248, 113, 113, 0.35);
+}
+
+.job__name {
+  margin-top: 2px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.job__facts,
+.job__po {
+  font-size: 12px;
+  opacity: 0.8;
+  overflow-wrap: anywhere;
+}
+
+.job__po--none {
+  font-style: italic;
+  opacity: 0.6;
 }

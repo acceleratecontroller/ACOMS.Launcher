@@ -100,7 +100,22 @@ function sameUrl(a, b) {
   return norm(a) === norm(b);
 }
 
+// The picture viewer: nearly the whole of the screen it opens on, centred,
+// whatever size the chat window is (Dion, 2026-09-25). `workArea` is Electron's
+// display.workArea — the screen minus the taskbar.
+function viewerBounds(workArea, fraction = 0.92) {
+  const width = Math.round(workArea.width * fraction);
+  const height = Math.round(workArea.height * fraction);
+  return {
+    x: workArea.x + Math.round((workArea.width - width) / 2),
+    y: workArea.y + Math.round((workArea.height - height) / 2),
+    width,
+    height
+  };
+}
+
 module.exports = {
+  viewerBounds,
   windowKey,
   portalIdOfKey,
   normaliseViews,

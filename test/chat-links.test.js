@@ -56,3 +56,12 @@ test('the job link base comes from the chat.jobs block and the portal list', () 
   assert.strictEqual(jobLinkBaseFor({ portal: 'nope' }, portals), null);
   assert.strictEqual(jobLinkBaseFor(undefined, portals), null);
 });
+
+test('job numbers for cards: in order, each once, none from inside a URL, capped', () => {
+  const { jobNumbersIn } = require('../src/chat-links');
+  const base = 'https://wip.example/jobs/';
+  assert.deepEqual(jobNumbersIn('A1174 and a1016b, then A1174 again', base), ['A1174', 'A1016B']);
+  assert.deepEqual(jobNumbersIn('see https://x.example/A1174 only', base), []);
+  assert.deepEqual(jobNumbersIn('A0001 A0002 A0003 A0004', base), ['A0001', 'A0002', 'A0003']);
+  assert.deepEqual(jobNumbersIn('A1174', null), []);
+});

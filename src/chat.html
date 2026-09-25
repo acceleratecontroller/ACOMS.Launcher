@@ -17,6 +17,18 @@
       <header class="side__header">
         <h1>Chat</h1>
         <p id="me" class="side__me"></p>
+        <div class="search">
+          <input
+            id="search"
+            class="search__input"
+            type="search"
+            placeholder="Search chats (Ctrl+F)"
+            aria-label="Search chats"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button id="search-clear" class="search__clear" type="button" aria-label="Clear search" hidden>✕</button>
+        </div>
       </header>
       <nav id="people" class="people" aria-label="People">
         <!-- Rendered by chat-window.js -->
@@ -46,15 +58,6 @@
       <div id="drop" class="drop" hidden><div class="drop__box">Drop to attach</div></div>
     </main>
 
-    <div id="viewer" class="viewer" hidden>
-      <div class="viewer__bar">
-        <span id="viewer-name" class="viewer__name"></span>
-        <button id="viewer-open" class="viewer__btn" type="button">Open</button>
-        <button id="viewer-save" class="viewer__btn" type="button">Save as…</button>
-        <button id="viewer-close" class="viewer__btn" type="button" aria-label="Close">✕</button>
-      </div>
-      <img id="viewer-img" class="viewer__img" alt="" />
-    </div>
 
     <script src="chat-links.js"></script>
     <script src="chat-seen.js"></script>

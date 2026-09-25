@@ -1,0 +1,113 @@
+/* The picture viewer: a dark window that is nearly all picture. Same palette
+   as chat so it reads as part of the app. */
+:root {
+  --bg: #05080b;
+  --card: #1b2530;
+  --text: #e8eef5;
+  --muted: #8a99a8;
+  --accent: #3b82f6;
+  --border: #2a3744;
+  --danger: #f87171;
+}
+
+* {
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+.bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.bar__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.bar__zoom {
+  min-width: 48px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bar__btn {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.bar__btn:hover {
+  border-color: var(--accent);
+}
+
+/* The picture sits in a scrolling stage. Centred while it fits; once zoomed
+   past the window it scrolls, and can be dragged. */
+.stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: grid;
+  overflow: auto;
+  cursor: zoom-in;
+}
+
+.stage--zoomed {
+  cursor: grab;
+}
+
+.stage--dragging {
+  cursor: grabbing;
+}
+
+.img {
+  margin: auto;
+  max-width: none;
+  image-rendering: auto;
+}
+
+.status {
+  place-self: center;
+  color: var(--muted);
+}
+
+.status--error {
+  color: var(--danger);
+}
+
+.status[hidden],
+.img[hidden] {
+  display: none;
+}
