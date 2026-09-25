@@ -175,6 +175,11 @@ function toast(text) {
     // One card per conversation: a second message from the same person
     // replaces their card rather than stacking another under it.
     key: `chat:${text.conversationId}`,
+    // Stays until clicked or dismissed. It used to fade after 9 seconds, so a
+    // message that arrived while you looked elsewhere was a beep and nothing
+    // (Dion, 2026-09-25: "i can hear it but the pop up isn't working ... it's
+    // supposed to pop up and not go away till you click").
+    sticky: true,
     onClick: () => {
       if (openChatWindow) openChatWindow(text.conversationId);
     }

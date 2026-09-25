@@ -78,7 +78,11 @@ function ensureWindow() {
       preload: path.join(__dirname, 'popup-preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      // The window spends most of its life hidden, and a hidden page is
+      // throttled: a card sent to it could land a beat AFTER the window showed,
+      // and a transparent window with nothing drawn yet is invisible.
+      backgroundThrottling: false
     }
   });
   // Above ordinary always-on-top windows too; a pop-up hidden behind one of
@@ -110,7 +114,12 @@ function sync() {
 
   w.setBounds(boundsFor(screen.getPrimaryDisplay().workArea, cards.length));
   w.webContents.send('popup:cards', cards.map(toWire));
+  // Windows can drop a hidden window's always-on-top, so a card could come
+  // back BEHIND a maximised app - heard (the beep) but not seen. Re-assert it
+  // and raise the window every time, not only when it was hidden.
+  w.setAlwaysOnTop(true, 'pop-up-menu');
   if (!w.isVisible()) w.showInactive();
+  w.moveTop();
 }
 
 function arm(card, ms) {
