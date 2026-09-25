@@ -20,8 +20,9 @@
 //   2. Nothing is announced twice. Item ids are remembered across restarts, so
 //      the same approval doesn't toast every time the app starts.
 
-const { Notification, net } = require('electron');
+const { net } = require('electron');
 const store = require('./store');
+const popup = require('./popup');
 const { decideAnnouncements } = require('./announce-rules');
 const {
   planDay,
@@ -29,7 +30,7 @@ const {
   planIsStale,
   nextFireAt
 } = require('./reminder-schedule');
-const { buildTaskReminder, buildToastXml } = require('./task-reminder');
+const { buildTaskReminder } = require('./task-reminder');
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const FIRST_POLL_DELAY_MS = 8 * 1000; // let the picker paint first
@@ -143,13 +144,19 @@ async function fetchSummary(portal) {
   }
 }
 
+// The launcher's own pop-up card, not an OS notification — see popup.js.
 function notify(portal, title, body, targetUrl) {
-  if (!Notification.isSupported()) return;
-  const n = new Notification({ title, body });
-  n.on('click', () => {
-    if (openPortalAt) openPortalAt(portal.id, targetUrl);
+  popup.show({
+    kind: 'portal',
+    label: 'Waiting on you',
+    title,
+    body,
+    // Every portal is "ACOMS.something", so the badge takes the something.
+    name: String(portal.name || '').replace(/^ACOMS\./i, ''),
+    onClick: () => {
+      if (openPortalAt) openPortalAt(portal.id, targetUrl);
+    }
   });
-  n.show();
 }
 
 // Decide what, if anything, to say about one portal's new items.
@@ -256,24 +263,22 @@ function fireTaskReminder(portal, result) {
   });
   if (!reminder) return false;
 
-  if (!Notification.isSupported()) return false;
-
   const target = new URL('/tasks', portal.url).toString();
-  const n = new Notification({
+  popup.show({
+    kind: 'reminder',
+    label: 'Task reminder',
+    badge: '!',
     title: reminder.title,
     body: reminder.body,
-    // Windows only: a reminder-scenario toast stays on screen until it is
-    // dealt with, rather than filing itself away after ~25 seconds. Ignored
-    // on macOS, which falls back to title/body above.
-    toastXml:
-      process.platform === 'win32'
-        ? buildToastXml({ title: reminder.title, body: reminder.body })
-        : undefined
+    // Stays on screen until it is dealt with, on every platform — what the
+    // Windows-only "reminder scenario" toast used to be for.
+    sticky: true,
+    // A later reminder replaces an undealt-with one rather than stacking.
+    key: `reminder:${portal.id}`,
+    onClick: () => {
+      if (openPortalAt) openPortalAt(portal.id, target);
+    }
   });
-  n.on('click', () => {
-    if (openPortalAt) openPortalAt(portal.id, target);
-  });
-  n.show();
   return true;
 }
 

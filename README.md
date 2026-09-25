@@ -49,6 +49,20 @@ you sign in to each portal exactly as you would in a browser.
 
 ## Notifications
 
+**The launcher draws its own pop-ups.** Notifications appear as cards in the
+bottom-right corner of your main screen, drawn by the launcher itself — not
+handed to Windows or macOS. That is deliberate: Windows notifications turned
+out to be switched off on most people's PCs, so they were quietly landing in a
+side panel nobody opens. The cards don't depend on any Windows setting, Do Not
+Disturb included, and they never take the keyboard away from what you're typing.
+
+Click a card to go to the thing it is about; hover and press × to dismiss it.
+Cards clear themselves after about nine seconds (resting the mouse on them
+holds them), except a task reminder, which stays until you deal with it. A blue
+stripe is a chat message, green is something waiting on you in a portal, amber
+is a task reminder. Be aware they also show while you are presenting or sharing
+your screen.
+
 Portals that offer a `summary` endpoint (see `portals.json`) are checked every
 five minutes for things waiting on **you** — approvals in your queue, tasks
 due, that sort of thing. When something new turns up you get a normal Windows
@@ -141,8 +155,9 @@ are signed in to Controller — if chat says **Sign in**, that is what it needs.
 Only the people in a conversation can read it. Nothing anyone types is written
 to disk on your computer; the launcher re-reads conversations from the server.
 
-It checks for new messages every 3 seconds while you are in the chat window,
-every 8 while it is open but behind something, and every 20 in the background.
+It checks for new messages every 3 seconds while you are in the chat window
+and every 5 otherwise, so a message reaches the other person within about five
+seconds whatever they are doing.
 
 Links in a message are clickable, and a link to an ACOMS portal opens in that
 portal's window like any other cross-portal link — paste a job's address to
