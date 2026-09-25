@@ -14,8 +14,13 @@ const {
   sameUrl
 } = require('./window-rules');
 const chat = require('./chat');
+const chatFiles = require('./chat-files');
 const popup = require('./popup');
 const store = require('./store');
+
+// Thumbnails in chat load from acoms-file:// (chat-files.js); a scheme's
+// privileges can only be granted before the app is ready.
+chatFiles.registerScheme();
 
 // ---------------------------------------------------------------------------
 // Portal config
@@ -535,6 +540,31 @@ function openChat(conversationId) {
   hidePicker();
 }
 
+// A file the chat window wants sent: a name, a type and the bytes, nothing
+// else carried through.
+function cleanOutgoingFiles(files) {
+  if (!Array.isArray(files)) return [];
+  return files
+    .filter((f) => f && typeof f.name === 'string' && f.data instanceof ArrayBuffer)
+    .slice(0, 10)
+    .map((f) => ({ name: f.name, type: typeof f.type === 'string' ? f.type : '', data: f.data }));
+}
+
+function attachmentArg(file) {
+  if (!file || typeof file.id !== 'string' || !file.id) throw new Error('No such file');
+  return { id: file.id, name: typeof file.name === 'string' ? file.name : 'file' };
+}
+
+// { ok: true } or { ok: false, error } — a failed open is shown in the window,
+// not thrown across IPC.
+async function runFileAction(fn) {
+  try {
+    return { ok: true, ...((await fn()) || {}) };
+  } catch (err) {
+    return { ok: false, error: (err && err.message) || 'That did not work' };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // IPC (renderer <-> main)
 // ---------------------------------------------------------------------------
@@ -581,7 +611,17 @@ ipcMain.handle('chat:badge', () => chatBadge());
 ipcMain.handle('chat:get', () => chat.snapshot());
 ipcMain.handle('chat:select-conversation', (_event, id) => chat.selectConversation(id));
 ipcMain.handle('chat:select-person', (_event, id) => chat.selectPerson(id));
-ipcMain.handle('chat:send', (_event, text) => chat.send(text));
+ipcMain.handle('chat:send', (_event, text, files) => chat.send(text, cleanOutgoingFiles(files)));
+// Files in chat (chat-files.js). Every argument comes from a renderer, so it
+// is checked here rather than trusted.
+ipcMain.handle('chat:open-file', (_event, file) => runFileAction(() => chatFiles.open(attachmentArg(file))));
+ipcMain.handle('chat:save-file', (_event, file) =>
+  runFileAction(() => chatFiles.save(attachmentArg(file), chatWindow))
+);
+ipcMain.handle('chat:clipboard-files', () => chatFiles.clipboardFiles());
+ipcMain.handle('chat:read-clipboard-file', (_event, filePath) =>
+  typeof filePath === 'string' ? chatFiles.readClipboardFile(filePath) : null
+);
 ipcMain.handle('chat:retry', () => chat.pollNow());
 ipcMain.handle('chat:sign-in', () => {
   if (chatConfig) openPortal(chatConfig.portal);

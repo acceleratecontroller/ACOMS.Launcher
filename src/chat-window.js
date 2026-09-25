@@ -14,6 +14,14 @@ const composerEl = document.getElementById('composer');
 const inputEl = document.getElementById('input');
 const sendEl = document.getElementById('send');
 const sendErrorEl = document.getElementById('send-error');
+const pendingEl = document.getElementById('pending');
+const attachEl = document.getElementById('attach');
+const fileInputEl = document.getElementById('file-input');
+const dropEl = document.getElementById('drop');
+const viewerEl = document.getElementById('viewer');
+const viewerImgEl = document.getElementById('viewer-img');
+const viewerNameEl = document.getElementById('viewer-name');
+const Files = window.acomsChatFiles;
 
 let state = null;
 // What the thread last drew, so a poll that changed nothing doesn't rebuild it
@@ -109,7 +117,7 @@ function renderPeople() {
     const last = row.conversation && row.conversation.lastMessage;
     if (last) {
       const mine = state.me && last.senderId === state.me.identityId;
-      text.append(el('span', 'person__last', `${mine ? 'You: ' : ''}${last.body}`));
+      text.append(el('span', 'person__last', `${mine ? 'You: ' : ''}${Files.previewText(last)}`));
     }
 
     btn.append(dot, text);
@@ -118,6 +126,8 @@ function renderPeople() {
     }
 
     btn.addEventListener('click', () => {
+      // Files waiting to go belong to the conversation they were added in.
+      if (!isActiveRow(row)) clearPending();
       if (row.conversation) window.acomsChat.selectConversation(row.conversation.id);
       else window.acomsChat.selectPerson(row.person.identityId);
       inputEl.focus();
@@ -168,6 +178,113 @@ function appendLinked(parent, text) {
   }
 }
 
+// ── Files in a message ─────────────────────────────────────────────────────
+// Pictures show as thumbnails that open the viewer; anything else is a card
+// that opens the file in the computer's own app, with a save button beside it.
+
+function fileUrl(file) {
+  return `acoms-file://attachment/${encodeURIComponent(file.id)}`;
+}
+
+function renderAttachments(files, mine) {
+  const wrap = el('div', 'files');
+  const images = files.filter((f) => Files.isImage(f.contentType));
+  const others = files.filter((f) => !Files.isImage(f.contentType));
+
+  if (images.length > 0) {
+    const grid = el('div', `thumbs${images.length === 1 ? ' thumbs--one' : ''}`);
+    for (const f of images) {
+      const btn = el('button', 'thumb');
+      btn.type = 'button';
+      btn.title = `${f.name} — click to expand`;
+      const img = el('img');
+      img.alt = f.name;
+      img.src = fileUrl(f);
+      img.addEventListener('error', () => {
+        btn.classList.add('thumb--broken');
+        btn.replaceChildren(el('span', 'thumb__broken', 'Picture unavailable'));
+      });
+      btn.append(img);
+      btn.addEventListener('click', () => openViewer(f));
+      grid.append(btn);
+    }
+    wrap.append(grid);
+  }
+
+  for (const f of others) {
+    const card = el('div', `file${mine ? ' file--mine' : ''}`);
+    const open = el('button', 'file__main');
+    open.type = 'button';
+    open.title = `Open ${f.name}`;
+    const text = el('span', 'file__text');
+    text.append(el('span', 'file__name', f.name), el('span', 'file__size', Files.formatSize(f.size)));
+    open.append(el('span', 'file__icon', '📄'), text);
+    open.addEventListener('click', () => fileAction('openFile', f));
+    const save = el('button', 'file__save', '⤓');
+    save.type = 'button';
+    save.title = 'Save as…';
+    save.setAttribute('aria-label', `Save ${f.name}`);
+    save.addEventListener('click', () => fileAction('saveFile', f));
+    card.append(open, save);
+    wrap.append(card);
+  }
+  return wrap;
+}
+
+// Opening or saving happens in the main process; if it fails, say so where
+// send errors go rather than silently doing nothing.
+async function fileAction(kind, file) {
+  const result = await window.acomsChat[kind]({ id: file.id, name: file.name });
+  if (result && !result.ok) showLocalError(result.error || 'That did not work');
+}
+
+let localError = '';
+let localErrorTimer = null;
+function showLocalError(text) {
+  localError = text;
+  clearTimeout(localErrorTimer);
+  localErrorTimer = setTimeout(() => {
+    localError = '';
+    render();
+  }, 6000);
+  render();
+}
+
+// ── The picture viewer ─────────────────────────────────────────────────────
+// Click a thumbnail: the picture fills the window. Esc, ✕ or a click on the
+// dark surround closes it.
+
+let viewing = null;
+
+function openViewer(file) {
+  viewing = file;
+  viewerNameEl.textContent = file.name;
+  viewerImgEl.alt = file.name;
+  viewerImgEl.src = fileUrl(file);
+  viewerEl.hidden = false;
+}
+
+function closeViewer() {
+  viewing = null;
+  viewerEl.hidden = true;
+  viewerImgEl.removeAttribute('src');
+}
+
+viewerEl.addEventListener('click', (event) => {
+  // Anywhere but the button bar closes it, the picture included.
+  if (!event.target.closest('.viewer__bar')) closeViewer();
+});
+document.getElementById('viewer-close').addEventListener('click', closeViewer);
+document.getElementById('viewer-open').addEventListener('click', () => {
+  if (viewing) fileAction('openFile', viewing);
+});
+document.getElementById('viewer-save').addEventListener('click', () => {
+  if (viewing) fileAction('saveFile', viewing);
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !viewerEl.hidden) closeViewer();
+});
+
 function renderMessages() {
   const msgs = state.activeMessages;
   // Their read time is part of the key: a tick appearing IS a change to draw.
@@ -206,8 +323,13 @@ function renderMessages() {
     }
     const mine = state.me && m.senderId === state.me.identityId;
     const bubble = el('div', `msg${mine ? ' msg--mine' : ''}`);
+    const files = Files.attachmentsOf(m);
+    if (files.length > 0) {
+      bubble.classList.add('msg--files');
+      bubble.append(renderAttachments(files, mine));
+    }
     const body = el('div', 'msg__body');
-    appendLinked(body, m.body);
+    if (m.body) appendLinked(body, m.body);
     const time = el('div', 'msg__time');
     time.append(el('span', 'msg__clock', timeOf(m.createdAt)));
     // My message, and they have read it: a green tick by the time.
@@ -216,11 +338,24 @@ function renderMessages() {
       tick.title = 'Seen';
       time.append(tick);
     }
-    bubble.append(body, time);
+    if (m.body) bubble.append(body);
+    bubble.append(time);
     messagesEl.append(bubble);
   }
 
-  if (switched || nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+  const stick = switched || nearBottom;
+  if (stick) messagesEl.scrollTop = messagesEl.scrollHeight;
+  // A thumbnail has no height until it loads; stay at the bottom as they do.
+  for (const img of messagesEl.querySelectorAll('img')) {
+    if (img.complete) continue;
+    img.addEventListener(
+      'load',
+      () => {
+        if (stick) messagesEl.scrollTop = messagesEl.scrollHeight;
+      },
+      { once: true }
+    );
+  }
 }
 
 // ── Anything standing in the way ───────────────────────────────────────────
@@ -265,8 +400,11 @@ function render() {
   renderMessages();
 
   composerEl.hidden = !state.active || state.status !== 'ok';
-  sendErrorEl.hidden = !state.sendError;
-  sendErrorEl.textContent = state.sendError || '';
+  const note = state.sendError || localError || state.sending || '';
+  sendErrorEl.hidden = !note;
+  sendErrorEl.textContent = note;
+  sendErrorEl.classList.toggle('send-error--progress', Boolean(note) && note === state.sending);
+  renderPending();
 }
 
 // ── Composer ───────────────────────────────────────────────────────────────
@@ -277,23 +415,167 @@ function autoGrow() {
   inputEl.classList.toggle('composer__input--tall', inputEl.scrollHeight > 140);
 }
 
+// ── Files waiting to be sent ───────────────────────────────────────────────
+// Dropped, pasted or picked files sit above the box until Send, each with an
+// ✕, so a wrong screenshot can be taken back before anyone sees it.
+
+let pending = []; // { key, file: File, url: string|null }
+let pendingKey = 0;
+let drawnPendingKey = '';
+
+function canAttach() {
+  return Boolean(state && state.active && state.status === 'ok');
+}
+
+function addFiles(list, { pasted = false } = {}) {
+  if (!canAttach()) return;
+  const { accepted, refused } = Files.checkFiles([...list], pending.length);
+  for (const original of accepted) {
+    const name = pasted ? Files.nameForPaste(original.name, original.type) : original.name;
+    const file = name === original.name ? original : new File([original], name, { type: original.type });
+    const type = file.type || Files.typeFromName(file.name);
+    pending.push({ key: ++pendingKey, file, url: Files.isImage(type) ? URL.createObjectURL(file) : null });
+  }
+  if (refused.length > 0) showLocalError(refused.join(' · '));
+  renderPending();
+  inputEl.focus();
+}
+
+function removePending(key) {
+  const item = pending.find((p) => p.key === key);
+  if (item && item.url) URL.revokeObjectURL(item.url);
+  pending = pending.filter((p) => p.key !== key);
+  renderPending();
+}
+
+function clearPending() {
+  for (const p of pending) if (p.url) URL.revokeObjectURL(p.url);
+  pending = [];
+  renderPending();
+}
+
+function renderPending() {
+  const key = `${pending.map((p) => p.key).join(',')}|${composerEl.hidden}`;
+  if (key === drawnPendingKey) return;
+  drawnPendingKey = key;
+
+  pendingEl.replaceChildren();
+  pendingEl.hidden = pending.length === 0 || composerEl.hidden;
+  for (const p of pending) {
+    const chip = el('div', `pending__item${p.url ? ' pending__item--image' : ''}`);
+    chip.title = `${p.file.name} (${Files.formatSize(p.file.size)})`;
+    if (p.url) {
+      const img = el('img');
+      img.src = p.url;
+      img.alt = p.file.name;
+      chip.append(img);
+    } else {
+      chip.append(el('span', 'file__icon', '📄'), el('span', 'pending__name', p.file.name));
+    }
+    const x = el('button', 'pending__remove', '✕');
+    x.type = 'button';
+    x.title = 'Remove';
+    x.setAttribute('aria-label', `Remove ${p.file.name}`);
+    x.addEventListener('click', () => removePending(p.key));
+    chip.append(x);
+    pendingEl.append(chip);
+  }
+}
+
 async function submit() {
   const text = inputEl.value.trim();
-  if (!text || sendEl.disabled) return;
+  if ((!text && pending.length === 0) || sendEl.disabled) return;
   sendEl.disabled = true;
+  attachEl.disabled = true;
   try {
-    const result = await window.acomsChat.send(text);
-    // Only clear what was typed once the server has it.
+    const files = await Promise.all(
+      pending.map(async (p) => ({
+        name: p.file.name,
+        type: p.file.type || Files.typeFromName(p.file.name),
+        data: await p.file.arrayBuffer()
+      }))
+    );
+    const result = await window.acomsChat.send(text, files);
+    // Only clear what was typed — and the files — once the server has it.
     if (result && result.ok) {
       inputEl.value = '';
+      clearPending();
       autoGrow();
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
   } finally {
     sendEl.disabled = false;
+    attachEl.disabled = false;
     inputEl.focus();
   }
 }
+
+attachEl.addEventListener('click', () => fileInputEl.click());
+fileInputEl.addEventListener('change', () => {
+  addFiles(fileInputEl.files || []);
+  fileInputEl.value = '';
+});
+
+// Ctrl+V: a snip or screenshot arrives as a file on the paste event. A file
+// copied in Explorer often doesn't, so when the paste carries neither files
+// nor text, ask the main process what the clipboard holds.
+inputEl.addEventListener('paste', async (event) => {
+  const data = event.clipboardData;
+  const files = data ? [...data.files] : [];
+  if (files.length > 0) {
+    event.preventDefault();
+    addFiles(files, { pasted: true });
+    return;
+  }
+  if (!canAttach() || (data && data.getData('text/plain'))) return;
+
+  const copied = await window.acomsChat.clipboardFiles();
+  if (!copied || copied.length === 0) return;
+  const { accepted, refused } = Files.checkFiles(copied, pending.length);
+  if (refused.length > 0) showLocalError(refused.join(' · '));
+  const read = [];
+  for (const f of accepted) {
+    try {
+      const bytes = await window.acomsChat.readClipboardFile(f.path);
+      if (bytes) read.push(new File([bytes], f.name, { type: Files.typeFromName(f.name) }));
+    } catch {
+      showLocalError(`Couldn’t read ${f.name}`);
+    }
+  }
+  addFiles(read);
+});
+
+// Drag and drop anywhere in the window. Without preventDefault on dragover,
+// Chromium would try to open the dropped file itself.
+let dragDepth = 0;
+
+function isFileDrag(event) {
+  return Boolean(event.dataTransfer && [...event.dataTransfer.types].includes('Files'));
+}
+
+window.addEventListener('dragenter', (event) => {
+  if (!isFileDrag(event)) return;
+  event.preventDefault();
+  dragDepth += 1;
+  dropEl.hidden = !canAttach();
+});
+window.addEventListener('dragover', (event) => {
+  if (!isFileDrag(event)) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = canAttach() ? 'copy' : 'none';
+});
+window.addEventListener('dragleave', (event) => {
+  if (!isFileDrag(event)) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) dropEl.hidden = true;
+});
+window.addEventListener('drop', (event) => {
+  if (!isFileDrag(event)) return;
+  event.preventDefault();
+  dragDepth = 0;
+  dropEl.hidden = true;
+  addFiles(event.dataTransfer.files || []);
+});
 
 composerEl.addEventListener('submit', (event) => {
   event.preventDefault();

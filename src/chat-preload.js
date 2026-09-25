@@ -21,7 +21,17 @@ contextBridge.exposeInMainWorld('acomsChat', {
   selectPerson: (identityId) => ipcRenderer.invoke('chat:select-person', identityId),
 
   // Resolves to { ok: boolean }; a failure's reason arrives as state.sendError.
-  send: (text) => ipcRenderer.invoke('chat:send', text),
+  // files: [{ name, type, data: ArrayBuffer }] — uploaded by the main process.
+  send: (text, files) => ipcRenderer.invoke('chat:send', text, files),
+
+  // A file in a message ({ id, name }): open it with the computer's own app,
+  // or save a copy. Resolve to { ok, error? }.
+  openFile: (file) => ipcRenderer.invoke('chat:open-file', file),
+  saveFile: (file) => ipcRenderer.invoke('chat:save-file', file),
+
+  // Files copied in Explorer, for a Ctrl+V the paste event didn't carry.
+  clipboardFiles: () => ipcRenderer.invoke('chat:clipboard-files'),
+  readClipboardFile: (path) => ipcRenderer.invoke('chat:read-clipboard-file', path),
 
   // Open ACOMS.Controller so the person can sign in again.
   signIn: () => ipcRenderer.invoke('chat:sign-in'),
