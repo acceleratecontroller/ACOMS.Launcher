@@ -15,6 +15,19 @@
   box-sizing: border-box;
 }
 
+/* Every scrollbar in the window, not just the portal list: slim, dark, a
+   rounded thumb that brightens on hover - no grey Windows bar (Dion,
+   2026-09-25). Chromium honours scrollbar-color over the ::-webkit rules
+   when both are set, so the thumb colour lives there. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+*:hover {
+  scrollbar-color: #3a4a5a transparent;
+}
+
 html,
 body {
   height: 100%;

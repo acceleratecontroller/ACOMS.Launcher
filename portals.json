@@ -3,6 +3,7 @@
   "_summaryComment": "'summary' is optional: the path to that portal's GET /api/launcher/summary route. A portal with one is polled for things waiting on you and can raise notifications; a portal without one is just a link, exactly as before. Add the key as each app grows the route.",
   "_doubleCheckUrls": "NOTE: the email, gis and controller URLs below were guessed during setup. Please double-check that acoms-email, acoms-gis and acoms-controller point at the right deployments before trusting them.",
   "_quickNoteComment": "The Quick Note strip has two halves. 'new' jumps to a fresh note (compose=1); 'view' opens the Quick Notes list. Both need the matching Controller update deployed. Change the base URLs here if Controller moves.",
+  "_viewsComment": "'views' (optional, per portal) are named pages that get their own half of the tile and their own window: 'id', 'label', 'tagline', a root-relative 'path', and 'maximize' to open it filling the screen. WIP's Scheduler is the first. Any tile can also open a second window: the + on the right, or Shift-click.",
   "_chatComment": "'chat' is optional: which portal hosts the chat routes (POST <sync> is what the launcher polls). Remove the block and the launcher simply has no chat.",
   "chat": {
     "portal": "acoms-controller",
@@ -30,7 +31,16 @@
       "id": "acoms-wip",
       "name": "ACOMS.WIP",
       "tagline": "Clients, contracts & jobs",
-      "url": "https://acoms-wip.vercel.app"
+      "url": "https://acoms-wip.vercel.app",
+      "views": [
+        {
+          "id": "scheduler",
+          "label": "Scheduler",
+          "tagline": "Full-screen board",
+          "path": "/scheduler",
+          "maximize": true
+        }
+      ]
     },
     {
       "id": "acoms-auth",
