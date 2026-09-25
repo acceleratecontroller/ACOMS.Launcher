@@ -170,9 +170,11 @@ function appendLinked(parent, text) {
 
 function renderMessages() {
   const msgs = state.activeMessages;
+  // Their read time is part of the key: a tick appearing IS a change to draw.
+  const readAt = window.acomsChatSeen.otherReadAt(state.conversations, state.active);
   const key = `${activeKey(state.active)}|${state.activeLoading}|${msgs.length}|${
     msgs.length ? msgs[msgs.length - 1].id : ''
-  }`;
+  }|${readAt || ''}`;
   if (key === drawnThreadKey) return;
 
   const switched = key.split('|')[0] !== drawnThreadKey.split('|')[0];
@@ -206,7 +208,15 @@ function renderMessages() {
     const bubble = el('div', `msg${mine ? ' msg--mine' : ''}`);
     const body = el('div', 'msg__body');
     appendLinked(body, m.body);
-    bubble.append(body, el('div', 'msg__time', timeOf(m.createdAt)));
+    const time = el('div', 'msg__time');
+    time.append(el('span', 'msg__clock', timeOf(m.createdAt)));
+    // My message, and they have read it: a green tick by the time.
+    if (mine && window.acomsChatSeen.isSeen(m, readAt)) {
+      const tick = el('span', 'msg__seen', '✓');
+      tick.title = 'Seen';
+      time.append(tick);
+    }
+    bubble.append(body, time);
     messagesEl.append(bubble);
   }
 

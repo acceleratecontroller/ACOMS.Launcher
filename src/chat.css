@@ -254,8 +254,12 @@ body {
 .msg__time {
   margin-top: 1px;
   font-size: 11px;
-  opacity: 0.65;
   text-align: right;
+}
+
+/* Only the time is dimmed, so the read tick beside it stays full strength. */
+.msg__clock {
+  opacity: 0.65;
 }
 
 .link {
@@ -326,4 +330,11 @@ body {
 
 .send-error[hidden] {
   display: none;
+}
+
+/* Read tick on my own messages once the other person has read them. */
+.msg__seen {
+  margin-left: 4px;
+  color: #4ade80;
+  font-weight: 800;
 }

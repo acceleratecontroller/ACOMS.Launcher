@@ -217,6 +217,20 @@ function show({
   return id;
 }
 
+// Take down every card of one kind (all chat cards once the chat window is in
+// front: whatever they said is on screen now).
+function dismissKind(kind) {
+  const ids = cards.filter((c) => c.kind === kind).map((c) => c.id);
+  if (ids.length === 0) return;
+  for (const id of ids) {
+    clearTimeout(timers.get(id));
+    timers.delete(id);
+    clickHandlers.delete(id);
+    cards = removeCard(cards, id);
+  }
+  sync();
+}
+
 function init() {
   ipcMain.on('popup:click', (_event, id) => {
     const run = clickHandlers.get(id);
@@ -252,4 +266,4 @@ function dispose() {
   win = null;
 }
 
-module.exports = { init, dispose, show, dismiss };
+module.exports = { init, dispose, show, dismiss, dismissKind };

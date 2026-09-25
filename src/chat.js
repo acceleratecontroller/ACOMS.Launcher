@@ -362,6 +362,10 @@ function setWindowState({ open, focused }) {
   if (!wasWatching && windowOpen && windowFocused && active && active.conversationId) {
     markRead(active.conversationId);
   }
+  // Clicking into chat clears its pop-ups (Dion, 2026-09-25: "if there is a
+  // notification on your screen and you click into the chat that notification
+  // goes away") - whoever they were from; unread still shows in the list.
+  if (!wasWatching && windowOpen && windowFocused) popup.dismissKind('chat');
   // The interval depends on these, so don't sit out the old, slower one.
   if (status === 'ok' || status === 'idle') pollNow();
 }

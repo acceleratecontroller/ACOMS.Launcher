@@ -76,13 +76,20 @@ test('the same conversation DOES notify when the window is behind something', ()
   assert.deepStrictEqual(d.toast.map((m) => m.id), ['m1']);
 });
 
-test('a different conversation notifies even while chat is focused', () => {
+test('nothing notifies while chat is focused, whichever conversation it is for', () => {
   const d = decideMessageToasts({
-    incoming: [msg({ conversationId: 'c2' })],
+    incoming: [msg({ conversationId: 'c2' }), msg({ id: 'm2', conversationId: 'c3' })],
     activeConversationId: 'c1',
     windowFocused: true
   });
-  assert.strictEqual(d.toast.length, 1);
+  assert.deepStrictEqual(d.toast, []);
+  // Still marked handled, so they don't pop up later when focus moves away.
+  assert.deepStrictEqual(d.handled, ['m1', 'm2']);
+});
+
+test('focused with no conversation picked yet is still focused', () => {
+  const d = decideMessageToasts({ incoming: [msg()], activeConversationId: null, windowFocused: true });
+  assert.deepStrictEqual(d.toast, []);
 });
 
 test('chat cannot be silenced from inside the app', () => {
