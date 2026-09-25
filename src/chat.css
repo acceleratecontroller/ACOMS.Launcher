@@ -730,12 +730,18 @@ body {
 }
 
 /* Edit and Delete sit just outside my bubble, on the left, on hover. */
+/* The bar touches the bubble (right: 100%) and its padding makes the space
+   between them part of it: crossing a gap that belonged to neither ended the
+   hover and the buttons vanished before the pointer got there (Dion,
+   2026-09-25). The padding is generous so a slightly diagonal move still
+   lands inside. */
 .msg__actions {
   position: absolute;
   top: 50%;
-  right: calc(100% + 6px);
+  right: 100%;
   display: none;
   gap: 2px;
+  padding: 10px 8px 10px 10px;
   transform: translateY(-50%);
 }
 
