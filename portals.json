@@ -5,9 +5,14 @@
   "_quickNoteComment": "The Quick Note strip has two halves. 'new' jumps to a fresh note (compose=1); 'view' opens the Quick Notes list. Both need the matching Controller update deployed. Change the base URLs here if Controller moves.",
   "_viewsComment": "'views' (optional, per portal) are named pages that get their own half of the tile and their own window: 'id', 'label', 'tagline', a root-relative 'path', and 'maximize' to open it filling the screen. WIP's Scheduler is the first. Any tile can also open a second window: the + on the right, or Shift-click.",
   "_chatComment": "'chat' is optional: which portal hosts the chat routes (POST <sync> is what the launcher polls). Remove the block and the launcher simply has no chat.",
+  "_chatJobsComment": "'chat.jobs' (optional): an A-number typed in a chat message (A1174, A1016B) links to <that portal's url><path><number>. Remove it and A-numbers stay plain text.",
   "chat": {
     "portal": "acoms-controller",
-    "sync": "/api/chat/sync"
+    "sync": "/api/chat/sync",
+    "jobs": {
+      "portal": "acoms-wip",
+      "path": "/jobs/"
+    }
   },
   "quickNote": {
     "tagline": "Jot or browse Controller notes",

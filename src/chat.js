@@ -23,6 +23,7 @@
 
 const { net } = require('electron');
 const popup = require('./popup');
+const { jobLinkBaseFor } = require('./chat-links');
 const {
   pollIntervalMs,
   decideMessageToasts,
@@ -49,6 +50,7 @@ let errorMessage = '';
 
 let baseUrl = null;
 let syncPath = '/api/chat/sync';
+let jobLinkBase = null; // where an A-number in a message links to (chat-links.js)
 let openChatWindow = null; // injected by main.js: (conversationId) => void
 
 let me = null;
@@ -84,7 +86,8 @@ function snapshot() {
     active,
     activeMessages,
     activeLoading,
-    sendError
+    sendError,
+    jobLinkBase
   };
 }
 
@@ -375,6 +378,7 @@ function init({ portals, config, openChat }) {
     return;
   }
   baseUrl = portal.url;
+  jobLinkBase = jobLinkBaseFor(config.jobs, portals);
   if (typeof config.sync === 'string') syncPath = config.sync;
 
   schedule(FIRST_POLL_DELAY_MS);

@@ -149,20 +149,21 @@ function renderHeader() {
   );
 }
 
-// Turn the http(s) links in a message into real links. They open through the
-// launcher's own link handling: a portal link lands in that portal's window,
-// anything else goes to the browser.
+// Turn the http(s) links and ACOMS job numbers (A1174, A1016B) in a message
+// into real links (chat-links.js decides which). They open through the
+// launcher's own link handling: a portal link — a job number goes to WIP —
+// opens in a new window of that portal, anything else goes to the browser.
 function appendLinked(parent, text) {
-  const parts = String(text).split(/(https?:\/\/[^\s<>"]+)/g);
-  for (const part of parts) {
-    if (/^https?:\/\//.test(part)) {
-      const a = el('a', 'link', part);
-      a.href = part;
+  for (const part of window.acomsChatLinks.splitMessage(text, state.jobLinkBase)) {
+    if (part.href) {
+      const a = el('a', 'link', part.text);
+      a.href = part.href;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
+      if (part.href !== part.text) a.title = `Open ${part.text.toUpperCase()} in ACOMS.WIP`;
       parent.append(a);
-    } else if (part) {
-      parent.append(document.createTextNode(part));
+    } else {
+      parent.append(document.createTextNode(part.text));
     }
   }
 }
