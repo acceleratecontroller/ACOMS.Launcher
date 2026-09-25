@@ -70,7 +70,13 @@ function loadConfig() {
     const chatRaw = parsed.chat;
     const chatCfg =
       chatRaw && typeof chatRaw === 'object' && typeof chatRaw.portal === 'string'
-        ? { portal: chatRaw.portal, sync: typeof chatRaw.sync === 'string' ? chatRaw.sync : undefined }
+        ? {
+            portal: chatRaw.portal,
+            sync: typeof chatRaw.sync === 'string' ? chatRaw.sync : undefined,
+            // Where an A-number in a message links to (chat-links.js). v1.0.11
+            // shipped without this line, so every A-number stayed plain text.
+            jobs: chatRaw.jobs && typeof chatRaw.jobs === 'object' ? chatRaw.jobs : undefined
+          }
         : null;
     return { portals: list, quickNote: qn, chat: chatCfg };
   } catch (err) {

@@ -95,7 +95,10 @@ function ensureWindow() {
     ready = true;
     sync();
   });
+  const self = win;
   win.on('closed', () => {
+    // A replaced window closes after its successor exists; leave that one be.
+    if (win !== self) return;
     win = null;
     ready = false;
   });
@@ -104,9 +107,27 @@ function ensureWindow() {
 
 // Make the window match the cards: gone when there are none, otherwise sized to
 // hold exactly them and sitting in the corner of the primary display.
+//
+// The last card gone = the window is THROWN AWAY and a fresh hidden one built
+// for the next card, never hidden and re-shown. On Windows a pop-up window that
+// had been hidden came back deaf to clicks: the page saw the mouse arrive but
+// never the click, so after the first chat card every later one could be
+// neither opened nor dismissed (Dion, 2026-09-25: "works the first time ...
+// then other notifications pop up for chat and just stay there and you can't
+// make them go away"). Reproduced with real OS clicks against this module;
+// a newly built window takes the click every time.
 function sync() {
   if (cards.length === 0) {
-    if (win && !win.isDestroyed()) win.hide();
+    if (win && !win.isDestroyed()) {
+      const old = win;
+      win = null;
+      ready = false;
+      old.destroy();
+      // It went with the cursor still on it, so no mouseleave will ever come;
+      // left set, non-sticky cards would never fade again.
+      hovering = false;
+      ensureWindow();
+    }
     return;
   }
   const w = ensureWindow();
