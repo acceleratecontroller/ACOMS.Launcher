@@ -40,9 +40,13 @@ function preview(text) {
 //
 //   - Never twice: the server re-sends a few seconds of overlap on purpose, so
 //     ids already handled are dropped here.
-//   - Not for the conversation you are LOOKING at — focused window, that
-//     conversation open. Open-but-unfocused still notifies: the window being
-//     somewhere behind a portal is not the same as having read it.
+//   - Nothing at all while the chat window is focused — whichever conversation
+//     a message is for. Dion, 2026-09-25: "if chat window is actually open and
+//     active on pc then it shouldn't also do notifications because i'm writing
+//     in it". A message for another conversation shows as unread in the list
+//     on screen. (Until then only the conversation on screen was skipped.)
+//     Open-but-unfocused still notifies: the window being somewhere behind a
+//     portal is not the same as having read it.
 //
 // There is deliberately NO mute and NO quiet-hours input here. Dion, 2026-09-21:
 // chat is not opt-in — "if you have the launcher installed then you are
@@ -52,15 +56,12 @@ function preview(text) {
 function decideMessageToasts({
   incoming = [],
   handledIds = new Set(),
-  activeConversationId = null,
   windowFocused = false
 } = {}) {
   const fresh = incoming.filter((m) => m && m.id && !handledIds.has(m.id));
   const handled = fresh.map((m) => m.id);
 
-  const toast = fresh.filter(
-    (m) => !(windowFocused && activeConversationId && m.conversationId === activeConversationId)
-  );
+  const toast = windowFocused ? [] : fresh;
   return { toast, handled };
 }
 
