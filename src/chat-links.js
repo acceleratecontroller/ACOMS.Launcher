@@ -59,7 +59,22 @@
     return portal.url.replace(/\/$/, '') + (path.endsWith('/') ? path : path + '/');
   }
 
-  const api = { splitMessage, jobLinkBaseFor };
+  // The job numbers a message links to, in order, each once — what the job
+  // cards under a message are drawn for. Same rule as the links: a number
+  // inside a URL isn't one.
+  function jobNumbersIn(text, jobLinkBase, max = 3) {
+    if (!jobLinkBase) return [];
+    const seen = [];
+    for (const part of splitMessage(String(text || ''), jobLinkBase)) {
+      if (!part.href || !part.href.startsWith(jobLinkBase)) continue;
+      const n = jobNumber(part.text);
+      if (!seen.includes(n)) seen.push(n);
+      if (seen.length >= max) break;
+    }
+    return seen;
+  }
+
+  const api = { splitMessage, jobLinkBaseFor, jobNumbersIn };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.acomsChatLinks = api;
 })(typeof window !== 'undefined' ? window : this);

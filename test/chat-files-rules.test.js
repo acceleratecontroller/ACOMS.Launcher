@@ -91,3 +91,7 @@ test('a file copied in Explorer gets a type from its extension', () => {
   assert.equal(typeFromName('plan.pdf'), 'application/pdf');
   assert.equal(typeFromName('mystery.xyz'), 'application/octet-stream');
 });
+
+test('a deleted message reads as deleted wherever one line of it shows', () => {
+  assert.equal(previewText({ body: '', payload: null, deletedAt: '2026-09-25T06:00:00Z' }), 'Message deleted');
+});

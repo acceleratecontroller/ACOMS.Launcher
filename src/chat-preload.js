@@ -19,6 +19,21 @@ contextBridge.exposeInMainWorld('acomsChat', {
 
   selectConversation: (conversationId) => ipcRenderer.invoke('chat:select-conversation', conversationId),
   selectPerson: (identityId) => ipcRenderer.invoke('chat:select-person', identityId),
+  // A search result: open its conversation scrolled to it ({ id, createdAt }).
+  openAt: (conversationId, message) => ipcRenderer.invoke('chat:open-at', conversationId, message),
+
+  // Your own messages. Resolve to { ok, error? }.
+  editMessage: (id, text) => ipcRenderer.invoke('chat:edit', id, text),
+  deleteMessage: (id) => ipcRenderer.invoke('chat:delete', id),
+
+  // Called on each keystroke; the main process decides when to tell the server.
+  typing: () => ipcRenderer.send('chat:typing'),
+
+  // Your chat history. Resolves to { ok, results: [message], error? }.
+  search: (q) => ipcRenderer.invoke('chat:search', q),
+
+  // What WIP says about job numbers ["A1174"] — [{ number, found, name, … }].
+  jobCards: (numbers) => ipcRenderer.invoke('chat:job-cards', numbers),
 
   // Resolves to { ok: boolean }; a failure's reason arrives as state.sendError.
   // files: [{ name, type, data: ArrayBuffer }] — uploaded by the main process.

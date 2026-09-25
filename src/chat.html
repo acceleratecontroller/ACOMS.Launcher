@@ -17,6 +17,18 @@
       <header class="side__header">
         <h1>Chat</h1>
         <p id="me" class="side__me"></p>
+        <div class="search">
+          <input
+            id="search"
+            class="search__input"
+            type="search"
+            placeholder="Search chats (Ctrl+F)"
+            aria-label="Search chats"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button id="search-clear" class="search__clear" type="button" aria-label="Clear search" hidden>✕</button>
+        </div>
       </header>
       <nav id="people" class="people" aria-label="People">
         <!-- Rendered by chat-window.js -->

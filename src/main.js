@@ -376,8 +376,8 @@ function refreshTrayMenu() {
 //     contract. With opts.newWindow (the tile's "+" or Shift-click) a second
 //     window opens beside it.
 //   - opts.view: one of the portal's named views (WIP's Scheduler) — its own
-//     window, keyed apart from the portal's ordinary windows, maximised if
-//     the view asks for it.
+//     window, keyed apart from the portal's ordinary windows.
+//   - Every portal window opens maximised.
 //   - From a cross-app link / notification: openPortal(id, targetUrl) —
 //     focus the window AND navigate it to the linked page. handleNewWindow
 //     passes newWindow instead, so a link never hijacks a window.
@@ -406,9 +406,15 @@ function openPortal(id, targetUrl, opts = {}) {
     return;
   }
 
+  // Every portal opens maximised, as the Scheduler always has (Dion,
+  // 2026-09-25: "when you open any of the apps they open full screen").
+  // Maximised, not true full-screen: the title bar and taskbar stay, and
+  // restoring the window gives back a normal 1280x860 one. Created hidden and
+  // shown after maximising, so it doesn't flash small first.
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
+    show: false,
     title: view ? `${portal.name} — ${view.label}` : portal.name,
     webPreferences: {
       contextIsolation: true,
@@ -419,7 +425,8 @@ function openPortal(id, targetUrl, opts = {}) {
 
   attachLinkHandling(win.webContents);
   win.loadURL(targetUrl || (view ? viewUrl(portal, view) : portal.url));
-  if (view && view.maximize) win.maximize();
+  win.maximize();
+  win.show();
 
   rememberFocus(key, win);
   notifyOpenStateChanged();
@@ -658,6 +665,17 @@ ipcMain.handle('chat:open', () => openChat());
 ipcMain.handle('chat:badge', () => chatBadge());
 ipcMain.handle('chat:get', () => chat.snapshot());
 ipcMain.handle('chat:select-conversation', (_event, id) => chat.selectConversation(id));
+// A search result: open its conversation AT that message.
+ipcMain.handle('chat:open-at', (_event, conversationId, at) =>
+  chat.selectConversation(conversationId, {
+    at: at && typeof at === 'object' ? { id: String(at.id || ''), createdAt: String(at.createdAt || '') } : null
+  })
+);
+ipcMain.handle('chat:edit', (_event, id, text) => chat.editMessage(id, text));
+ipcMain.handle('chat:delete', (_event, id) => chat.deleteMessage(id));
+ipcMain.on('chat:typing', () => chat.typing());
+ipcMain.handle('chat:search', (_event, q) => chat.search(typeof q === 'string' ? q : ''));
+ipcMain.handle('chat:job-cards', (_event, numbers) => chat.jobCards(numbers));
 ipcMain.handle('chat:select-person', (_event, id) => chat.selectPerson(id));
 ipcMain.handle('chat:send', (_event, text, files) => chat.send(text, cleanOutgoingFiles(files)));
 // Files in chat (chat-files.js). Every argument comes from a renderer, so it

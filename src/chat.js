@@ -68,6 +68,8 @@ let activeMessages = [];
 let activeLoading = false;
 let sendError = '';
 let sending = ''; // "Sending 2 files…" while an upload is under way
+// A search result opened: the message to scroll to and flash once.
+let highlightId = null;
 
 let windowOpen = false;
 let windowFocused = false;
@@ -90,6 +92,7 @@ function snapshot() {
     activeLoading,
     sendError,
     sending,
+    highlightId,
     jobLinkBase
   };
 }
@@ -249,6 +252,15 @@ async function poll() {
       toast(messageToastText(decision.toast));
     }
 
+    // Edited or deleted since the last poll: replaced in place, never toasted.
+    const changed = Array.isArray(data.changed) ? data.changed : [];
+    if (activeId) {
+      const forActive = changed.filter(
+        (m) => m.conversationId === activeId && activeMessages.some((x) => x.id === m.id)
+      );
+      if (forActive.length > 0) activeMessages = mergeMessages(activeMessages, forActive);
+    }
+
     // Anything that arrived for the conversation on screen goes straight in.
     if (activeId) {
       const forActive = incoming.filter((m) => m.conversationId === activeId);
@@ -283,16 +295,22 @@ async function markRead(conversationId) {
   });
 }
 
-async function selectConversation(conversationId) {
+// opts.at: open the thread AT an older message (a search result) — load from
+// its time to now, and flash it once it is drawn.
+async function selectConversation(conversationId, opts = {}) {
   if (typeof conversationId !== 'string' || !conversationId) return;
   active = { conversationId };
   activeMessages = [];
   activeLoading = true;
   sendError = '';
+  highlightId = opts.at && typeof opts.at.id === 'string' ? opts.at.id : null;
   emit();
 
+  const from = opts.at && typeof opts.at.createdAt === 'string' ? opts.at.createdAt : null;
   const res = await request(
-    `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages`
+    `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages${
+      from ? `?from=${encodeURIComponent(from)}` : ''
+    }`
   );
   // The person may have clicked elsewhere while this was in flight.
   if (!active || active.conversationId !== conversationId) return;
@@ -319,6 +337,7 @@ function selectPerson(identityId) {
     return;
   }
   active = { toIdentityId: identityId };
+  highlightId = null;
   activeMessages = [];
   activeLoading = false;
   sendError = '';
@@ -378,6 +397,89 @@ async function send(text, files) {
   return { ok: true };
 }
 
+// ── Edit / delete your own message ─────────────────────────────────────────
+// Resolve to { ok, error? }. The server only lets a sender change their own.
+
+function applyChanged(message) {
+  if (message && active && active.conversationId === message.conversationId) {
+    activeMessages = mergeMessages(activeMessages, [message]);
+  }
+  emit();
+  pollNow(); // the list's last line may have changed
+}
+
+async function editMessage(id, text) {
+  if (typeof id !== 'string') return { ok: false };
+  const res = await request(`/api/chat/messages/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: { body: String(text || '') }
+  });
+  if (!res.ok) return { ok: false, error: res.message || 'Could not save the change' };
+  applyChanged(res.data);
+  return { ok: true };
+}
+
+async function deleteMessage(id) {
+  if (typeof id !== 'string') return { ok: false };
+  const res = await request(`/api/chat/messages/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok) return { ok: false, error: res.message || 'Could not delete it' };
+  applyChanged(res.data);
+  return { ok: true };
+}
+
+// ── Typing ─────────────────────────────────────────────────────────────────
+// The window calls this on every keystroke; at most one ping per interval
+// goes out. The server lets "typing…" lapse on its own.
+const TYPING_PING_MS = 3000;
+let lastTypingPing = { conversationId: null, at: 0 };
+
+function typing() {
+  if (!active || !active.conversationId || status !== 'ok') return;
+  const now = Date.now();
+  if (lastTypingPing.conversationId === active.conversationId && now - lastTypingPing.at < TYPING_PING_MS) {
+    return;
+  }
+  lastTypingPing = { conversationId: active.conversationId, at: now };
+  request(`/api/chat/conversations/${encodeURIComponent(active.conversationId)}/typing`, {
+    method: 'POST',
+    body: {}
+  });
+}
+
+// ── Search ─────────────────────────────────────────────────────────────────
+
+async function search(q) {
+  const text = String(q || '').trim();
+  if (text.length < 2) return { ok: true, results: [] };
+  const res = await request(`/api/chat/search?q=${encodeURIComponent(text)}`);
+  if (!res.ok) return { ok: false, error: res.message || 'Search failed', results: [] };
+  return { ok: true, results: Array.isArray(res.data.results) ? res.data.results : [] };
+}
+
+// ── Job cards ──────────────────────────────────────────────────────────────
+// What WIP says about an A-number in a message, via Controller. Kept for a
+// few minutes so a thread full of A1174 asks once.
+const JOB_CACHE_MS = 5 * 60 * 1000;
+const jobCache = new Map(); // number -> { at, card }
+
+async function jobCards(numbers) {
+  const wanted = (Array.isArray(numbers) ? numbers : [])
+    .filter((n) => typeof n === 'string' && /^A\d{3,5}[A-Z]?$/.test(n))
+    .slice(0, 10);
+  const now = Date.now();
+  const missing = wanted.filter((n) => {
+    const hit = jobCache.get(n);
+    return !hit || now - hit.at > JOB_CACHE_MS;
+  });
+  if (missing.length > 0) {
+    const res = await request(`/api/chat/jobs?n=${encodeURIComponent(missing.join(','))}`);
+    if (res.ok && Array.isArray(res.data.jobs)) {
+      for (const card of res.data.jobs) jobCache.set(card.number, { at: now, card });
+    }
+  }
+  return wanted.map((n) => (jobCache.get(n) || {}).card).filter(Boolean);
+}
+
 function setWindowState({ open, focused }) {
   const wasWatching = windowOpen && windowFocused;
   windowOpen = Boolean(open);
@@ -430,5 +532,10 @@ module.exports = {
   selectConversation,
   selectPerson,
   send,
+  editMessage,
+  deleteMessage,
+  typing,
+  search,
+  jobCards,
   setWindowState
 };

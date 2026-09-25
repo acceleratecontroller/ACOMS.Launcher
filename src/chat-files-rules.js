@@ -52,6 +52,7 @@
 
   // The text to show for a message where there is room for one line.
   function previewText(message) {
+    if (message && message.deletedAt) return 'Message deleted';
     const body = String((message && message.body) || '').trim();
     return body || summary(message);
   }
