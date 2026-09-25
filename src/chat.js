@@ -23,6 +23,7 @@
 
 const { net } = require('electron');
 const popup = require('./popup');
+const chatFiles = require('./chat-files');
 const { jobLinkBaseFor } = require('./chat-links');
 const {
   pollIntervalMs,
@@ -66,6 +67,7 @@ let active = null; // { conversationId } | { toIdentityId }
 let activeMessages = [];
 let activeLoading = false;
 let sendError = '';
+let sending = ''; // "Sending 2 files…" while an upload is under way
 
 let windowOpen = false;
 let windowFocused = false;
@@ -87,6 +89,7 @@ function snapshot() {
     activeMessages,
     activeLoading,
     sendError,
+    sending,
     jobLinkBase
   };
 }
@@ -322,18 +325,40 @@ function selectPerson(identityId) {
   emit();
 }
 
-async function send(text) {
+// `files`: [{ name, type, data: ArrayBuffer }] from the window — dropped,
+// pasted or picked. Each is uploaded first; the message then names them.
+// Nothing is cleared from the composer unless the whole message went.
+async function send(text, files) {
   const body = String(text || '').trim();
-  if (!body || !active) return { ok: false };
+  const list = Array.isArray(files) ? files : [];
+  if ((!body && list.length === 0) || !active) return { ok: false };
 
   const target = active;
   sendError = '';
+  sending = list.length > 0 ? `Sending ${list.length === 1 ? 'file' : `${list.length} files`}…` : '';
+  emit();
+
+  const attachmentIds = [];
+  try {
+    for (const f of list) attachmentIds.push(await chatFiles.upload(f));
+  } catch (err) {
+    sending = '';
+    sendError = (err && err.message) || 'A file did not upload';
+    emit();
+    return { ok: false };
+  }
+
   const res = await request('/api/chat/messages', {
     method: 'POST',
-    body: target.conversationId
-      ? { conversationId: target.conversationId, body }
-      : { toIdentityId: target.toIdentityId, body }
+    body: {
+      ...(target.conversationId
+        ? { conversationId: target.conversationId }
+        : { toIdentityId: target.toIdentityId }),
+      body,
+      ...(attachmentIds.length > 0 ? { attachmentIds } : {})
+    }
   });
+  sending = '';
 
   if (!res.ok) {
     sendError = res.state === 'signIn' ? 'Sign in to ACOMS.Controller to send' : res.message;
@@ -384,6 +409,7 @@ function init({ portals, config, openChat }) {
   baseUrl = portal.url;
   jobLinkBase = jobLinkBaseFor(config.jobs, portals);
   if (typeof config.sync === 'string') syncPath = config.sync;
+  chatFiles.init({ request, baseUrl: () => baseUrl });
 
   schedule(FIRST_POLL_DELAY_MS);
 }

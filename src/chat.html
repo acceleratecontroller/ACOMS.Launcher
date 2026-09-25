@@ -2,10 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- Same lock-down as the picker: our own files only, no remote loads. -->
+    <!-- Same lock-down as the picker: our own files only, no remote loads.
+         acoms-file: is chat's own scheme, answered by the main process
+         (chat-files.js); blob: is a picture waiting in the composer. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:;"
+      content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data: blob: acoms-file:;"
     />
     <title>ACOMS Chat</title>
     <link rel="stylesheet" href="chat.css" />
@@ -25,21 +27,38 @@
       <header id="thread-header" class="thread__header"></header>
       <div id="notice" class="notice" hidden></div>
       <div id="messages" class="messages" aria-live="polite"></div>
+      <div id="pending" class="pending" hidden></div>
       <form id="composer" class="composer" hidden>
+        <button id="attach" class="composer__attach" type="button" title="Attach files (or drag them in, or paste with Ctrl+V)" aria-label="Attach files">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg>
+        </button>
+        <input id="file-input" type="file" multiple hidden />
         <textarea
           id="input"
           class="composer__input"
           rows="1"
           maxlength="4000"
-          placeholder="Write a message — Enter to send, Shift+Enter for a new line"
+          placeholder="Write a message — Enter to send · paste or drop files to attach"
         ></textarea>
         <button id="send" class="composer__send" type="submit">Send</button>
       </form>
       <p id="send-error" class="send-error" hidden></p>
+      <div id="drop" class="drop" hidden><div class="drop__box">Drop to attach</div></div>
     </main>
+
+    <div id="viewer" class="viewer" hidden>
+      <div class="viewer__bar">
+        <span id="viewer-name" class="viewer__name"></span>
+        <button id="viewer-open" class="viewer__btn" type="button">Open</button>
+        <button id="viewer-save" class="viewer__btn" type="button">Save as…</button>
+        <button id="viewer-close" class="viewer__btn" type="button" aria-label="Close">✕</button>
+      </div>
+      <img id="viewer-img" class="viewer__img" alt="" />
+    </div>
 
     <script src="chat-links.js"></script>
     <script src="chat-seen.js"></script>
+    <script src="chat-files-rules.js"></script>
     <script src="chat-window.js"></script>
   </body>
 </html>

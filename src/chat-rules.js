@@ -1,5 +1,7 @@
 'use strict';
 
+const { previewText } = require('./chat-files-rules');
+
 // ---------------------------------------------------------------------------
 // Chat rules
 // ---------------------------------------------------------------------------
@@ -73,7 +75,7 @@ function messageToastText(messages) {
 
   if (messages.length === 1) {
     const m = messages[0];
-    return { title: m.senderName || 'New message', body: preview(m.body), conversationId: m.conversationId };
+    return { title: m.senderName || 'New message', body: preview(previewText(m)), conversationId: m.conversationId };
   }
 
   const senders = [...new Set(messages.map((m) => m.senderName || 'Someone'))];
@@ -81,7 +83,7 @@ function messageToastText(messages) {
   if (senders.length === 1) {
     return {
       title: senders[0],
-      body: `${messages.length} new messages — ${preview(last.body)}`,
+      body: `${messages.length} new messages — ${preview(previewText(last))}`,
       conversationId: last.conversationId
     };
   }
