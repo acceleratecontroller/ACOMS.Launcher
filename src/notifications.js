@@ -92,15 +92,25 @@ function summaryUrl(portal) {
   }
 }
 
-// Fetch through Electron's net module so the request uses the app session and
-// its cookies — the same session the portal windows are logged in to.
-async function fetchSummary(portal) {
-  const url = summaryUrl(portal);
-  if (!url) return { state: 'off' };
-
+// One session-aware JSON read. The request goes out through the app's own
+// session, so the portal's login cookie rides along; the launcher never
+// sees a token. Resolves, never throws:
+//   { status, data }          — answered (404 with a JSON body = "not found")
+//   { error: 'signIn' }       — a login redirect, 401 or 403: the session
+//                               has expired or the person lacks the role
+//   { error: '<reason>' }     — unreachable, 5xx, non-JSON (e.g. a portal
+//                               build without this route answers an HTML 404)
+// Used for the summary poll and for the company-task click check, so there
+// is exactly one place that knows how an ACOMS portal says "sign in".
+async function fetchJson(portal, relativePath, timeoutMs = REQUEST_TIMEOUT_MS) {
+  let url;
+  try {
+    url = new URL(relativePath, portal.url).toString();
+  } catch {
+    return { error: 'bad url' };
+  }
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await net.fetch(url, {
       method: 'GET',
@@ -111,64 +121,27 @@ async function fetchSummary(portal) {
       redirect: 'manual',
       signal: controller.signal
     });
-
-    // A login redirect is the normal way these portals say "your session
-    // expired". With redirect:'manual' the Fetch spec hands back an OPAQUE
-    // redirect — type 'opaqueredirect', status 0 — not the 3xx itself, so
-    // checking only for 30x would miss every one of them.
+    // With redirect:'manual' the Fetch spec hands back an OPAQUE redirect —
+    // type 'opaqueredirect', status 0 — not the 3xx itself.
     const isRedirect =
       res.type === 'opaqueredirect' || res.status === 0 || (res.status >= 300 && res.status < 400);
-    if (isRedirect || res.status === 401 || res.status === 403) {
-      return { state: 'signIn' };
+    if (isRedirect || res.status === 401 || res.status === 403) return { error: 'signIn' };
+    if (res.status === 404) {
+      // A JSON 404 is the route saying "no such thing"; an HTML 404 is a
+      // portal that does not have the route at all — a failure, not an answer.
+      try {
+        const body = await res.json();
+        return { status: 404, data: null, body };
+      } catch {
+        return { error: 'HTTP 404 (no such route)' };
+      }
     }
-    if (!res.ok) {
-      return { state: 'error', message: `HTTP ${res.status}` };
-    }
-
-    const data = await res.json();
-    const items = Array.isArray(data.items) ? data.items : [];
-    return {
-      state: 'ok',
-      badge: Number.isFinite(data.badge) ? data.badge : items.length,
-      summary: typeof data.summary === 'string' ? data.summary : '',
-      items,
-      // Optional per-kind totals. `items` is capped, so without these a
-      // reminder can only ever count what it can see — it says "at least"
-      // rather than stating a number that is wrong.
-      counts: data.counts && typeof data.counts === 'object' ? data.counts : null,
-      at: Date.now()
-    };
-  } catch (err) {
-    return { state: 'error', message: (err && err.message) || 'unreachable' };
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-// A small JSON read through the same session as fetchSummary — used for the
-// company-task click check. Resolves { status, data } or { error } and never
-// throws; the caller decides what a failure means.
-async function fetchJson(portal, relativePath) {
-  let url;
-  try {
-    url = new URL(relativePath, portal.url).toString();
-  } catch {
-    return { error: 'bad url' };
-  }
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const res = await net.fetch(url, {
-      method: 'GET',
-      credentials: 'include',
-      headers: { Accept: 'application/json' },
-      redirect: 'manual',
-      signal: controller.signal
-    });
-    if (res.type === 'opaqueredirect' || res.status === 0) return { error: 'signIn' };
-    if (res.status === 404) return { status: 404, data: null };
     if (!res.ok) return { error: `HTTP ${res.status}` };
-    return { status: res.status, data: await res.json() };
+    try {
+      return { status: res.status, data: await res.json() };
+    } catch {
+      return { error: 'not JSON' };
+    }
   } catch (err) {
     return { error: (err && err.message) || 'unreachable' };
   } finally {
@@ -176,78 +149,199 @@ async function fetchJson(portal, relativePath) {
   }
 }
 
+async function fetchSummary(portal) {
+  if (!summaryUrl(portal)) return { state: 'off' };
+  const r = await fetchJson(portal, portal.summary);
+  if (r.error === 'signIn') return { state: 'signIn' };
+  if (r.error) return { state: 'error', message: r.error };
+  const data = r.data && typeof r.data === 'object' ? r.data : {};
+  const items = Array.isArray(data.items) ? data.items : [];
+  return {
+    state: 'ok',
+    badge: Number.isFinite(data.badge) ? data.badge : items.length,
+    summary: typeof data.summary === 'string' ? data.summary : '',
+    items,
+    // Optional per-kind totals. `items` is capped, so without these a
+    // reminder can only ever count what it can see — it says "at least"
+    // rather than stating a number that is wrong.
+    counts: data.counts && typeof data.counts === 'object' ? data.counts : null,
+    at: Date.now()
+  };
+}
+
 // ---------------------------------------------------------------------------
 // ACOMS Tasks — company-task cards
 // ---------------------------------------------------------------------------
-// The rules (what is a company task, when a card retires, what a click does)
-// live in company-task-rules.js. This is the Electron side: the sticky card,
-// the live check on click, the swap-to-note when someone else takes it.
+// A card is on screen WHILE a company task is unclaimed. The rules (what is a
+// company task, what each poll should change, what a click does) live in
+// company-task-rules.js. This is the Electron side: the sticky cards, the
+// live check on click, the swap-to-note when someone else takes it.
+//
+// Per portal:
+//   shown     — taskId → generation of the individual card that is up
+//   dismissed — taskId → generation the person closed with ×; the card stays
+//               down for that generation and returns on the next (≤ 4 h)
+//   summary   — signature of the summary card if one is up
+const companyState = new Map(); // portalId → { shown, dismissed, summary, items }
 
-// taskId -> { portalId, item } for every company-task card on screen.
-const companyCards = new Map();
+// The click check should feel like a click, not a page load.
+const CLICK_CHECK_TIMEOUT_MS = 5 * 1000;
+
+function companyStateFor(portal) {
+  let st = companyState.get(portal.id);
+  if (!st) {
+    st = { shown: {}, dismissed: {}, summary: null, items: new Map() };
+    companyState.set(portal.id, st);
+  }
+  return st;
+}
 
 function showCompanyCard(portal, item) {
-  companyCards.set(item.taskId, { portalId: portal.id, item });
+  const st = companyStateFor(portal);
+  st.shown[item.taskId] = item.generation;
+  st.items.set(item.taskId, item);
   popup.show({
     kind: 'reminder',
     label: 'ACOMS task — unclaimed',
     badge: 'A',
     title: item.title,
     body: item.subtitle || 'Click to take it',
-    // Stays until clicked or until someone else takes it (decision 1).
+    // Stays until clicked, or until someone else takes it (decision 1).
     sticky: true,
     // Keyed by TASK: the 4-hourly re-pop replaces this card (and beeps
     // again) rather than stacking a second one.
     key: companyTasks.cardKey(item.taskId),
     onClick: () => {
-      handleCompanyClick(portal, item).catch(() => {});
+      // Clicked = seen, like ×: the card stays down for this generation while
+      // the person is in the queue deciding; still unclaimed in four hours,
+      // it is back.
+      delete st.shown[item.taskId];
+      st.dismissed[item.taskId] = item.generation;
+      handleCompanyClick(portal, item).catch((err) => {
+        console.error('company task click failed:', err && err.message);
+      });
+    },
+    // × — the person has seen it. Down until the next generation, not forever.
+    onDismiss: () => {
+      delete st.shown[item.taskId];
+      st.dismissed[item.taskId] = item.generation;
     }
   });
 }
 
-// Replace the card with a short, non-sticky note and let it fade.
-function retireCompanyCard(taskId, message) {
-  const entry = companyCards.get(taskId);
-  companyCards.delete(taskId);
-  if (!entry) return;
+function showCompanySummary(portal, summary) {
+  const st = companyStateFor(portal);
+  st.summary = summary.signature;
+  const target = new URL('/tasks?tab=acoms', portal.url).toString();
+  popup.show({
+    kind: 'reminder',
+    label: 'ACOMS tasks — unclaimed',
+    badge: String(summary.count).slice(0, 2),
+    title: `${summary.count} ACOMS tasks need someone`,
+    body: 'Click to open the queue and take one',
+    sticky: true,
+    key: companyTasks.cardKey(companyTasks.SUMMARY_KEY),
+    onClick: () => {
+      st.summary = null;
+      if (openPortalAt) openPortalAt(portal.id, target);
+    },
+    onDismiss: () => {
+      // Closed with ×: leave it down until the set changes.
+    }
+  });
+}
+
+// Swap a card for a short, non-sticky note and let it fade — or just take it
+// down when there is nothing to say.
+function retireCompanyCard(portal, taskId, message) {
+  const st = companyStateFor(portal);
+  const item = st.items.get(taskId);
+  delete st.shown[taskId];
+  st.items.delete(taskId);
+  const key = companyTasks.cardKey(taskId);
+  if (!message) {
+    popup.dismissKey(key);
+    return;
+  }
   popup.show({
     kind: 'reminder',
     label: 'ACOMS task',
     badge: 'A',
-    title: entry.item.title,
+    title: item ? item.title : 'ACOMS task',
     body: message,
     sticky: false,
-    key: companyTasks.cardKey(taskId)
+    key
   });
 }
 
 async function handleCompanyClick(portal, item) {
-  const res = await fetchJson(portal, `/api/launcher/tasks/${encodeURIComponent(item.taskId)}`);
+  const res = await fetchJson(
+    portal,
+    `/api/launcher/tasks/${encodeURIComponent(item.taskId)}`,
+    CLICK_CHECK_TIMEOUT_MS
+  );
   const outcome = companyTasks.clickOutcome({
     state: res.data || null,
     error: Boolean(res.error)
   });
   if (outcome.action === 'open') {
-    companyCards.delete(item.taskId);
-    popup.dismiss(`k:${companyTasks.cardKey(item.taskId)}`);
     if (openPortalAt) openPortalAt(portal.id, resolveItemUrl(portal, item));
     return;
   }
-  retireCompanyCard(item.taskId, outcome.message);
+  // The card itself is already gone (popup dismisses on click); say why the
+  // app did not open, briefly.
+  popup.show({
+    kind: 'reminder',
+    label: 'ACOMS task',
+    badge: 'A',
+    title: item.title,
+    body: outcome.message,
+    sticky: false,
+    key: companyTasks.cardKey(item.taskId)
+  });
 }
 
-// After a poll that answered: any card whose task has left the feed gets
-// swapped for "<name> has claimed this" (or "done") and fades.
-async function retireStaleCompanyCards(portal, result) {
+// After a poll that ANSWERED: make the cards match the feed. Runs off the
+// poll's critical path (pollOne does not await it) so a slow Controller
+// never holds up the badge or the reminders.
+async function reconcileCompanyCards(portal, result) {
   if (result.state !== 'ok') return;
-  const shown = [...companyCards.entries()]
-    .filter(([, v]) => v.portalId === portal.id)
-    .map(([taskId]) => taskId);
-  if (shown.length === 0) return;
-  const gone = companyTasks.cardsToRetire(shown, companyTasks.companyTaskItems(result.items));
-  for (const taskId of gone) {
-    const res = await fetchJson(portal, `/api/launcher/tasks/${encodeURIComponent(taskId)}`);
-    retireCompanyCard(taskId, companyTasks.retiredMessage(res.data || null));
+  const st = companyStateFor(portal);
+  const feedItems = companyTasks.companyTaskItems(result.items);
+  const plan = companyTasks.planCompanyCards({
+    feedItems,
+    shown: st.shown,
+    dismissed: st.dismissed,
+    summary: st.summary,
+    quiet: store.isMuted(portal.id) || store.inQuietHours()
+  });
+
+  // Cards folded into a summary come down without a note.
+  for (const taskId of plan.fold) retireCompanyCard(portal, taskId, null);
+  if (plan.dropSummary) {
+    st.summary = null;
+    popup.dismissKey(companyTasks.cardKey(companyTasks.SUMMARY_KEY));
+  }
+
+  // Cards whose task left the feed: find out why, in parallel, then swap.
+  await Promise.all(
+    plan.retire.map(async (taskId) => {
+      const res = await fetchJson(
+        portal,
+        `/api/launcher/tasks/${encodeURIComponent(taskId)}`,
+        CLICK_CHECK_TIMEOUT_MS
+      );
+      retireCompanyCard(portal, taskId, companyTasks.retiredMessage(res.data || null));
+    })
+  );
+
+  for (const item of plan.show) showCompanyCard(portal, item);
+  if (plan.summary) showCompanySummary(portal, plan.summary);
+
+  // Forget × dismissals for tasks that are gone.
+  const live = new Set(feedItems.map((i) => i.taskId));
+  for (const taskId of Object.keys(st.dismissed)) {
+    if (!live.has(taskId)) delete st.dismissed[taskId];
   }
 }
 
@@ -295,14 +389,9 @@ function announce(portal, result) {
   if (decision.announce.length === 0) return;
 
   const freshSet = new Set(decision.announce);
-  const freshItems = actionItems.filter((i) => freshSet.has(i.id));
-
-  // Company tasks: one sticky card each, always, never folded into a count —
-  // each is something a specific person has to decide to take.
-  for (const item of companyTasks.companyTaskItems(freshItems)) {
-    showCompanyCard(portal, item);
-  }
-  const newItems = freshItems.filter((i) => i.kind !== companyTasks.KIND);
+  // Company tasks are a STATE, reconciled every poll (reconcileCompanyCards),
+  // not an event announced once — they are left out of this path entirely.
+  const newItems = actionItems.filter((i) => freshSet.has(i.id) && i.kind !== companyTasks.KIND);
   if (newItems.length === 0) return;
 
   if (newItems.length === 1) {
@@ -337,7 +426,9 @@ async function pollOne(portal) {
   result.portalId = portal.id;
   results.set(portal.id, result);
   announce(portal, result);
-  await retireStaleCompanyCards(portal, result).catch(() => {});
+  reconcileCompanyCards(portal, result).catch((err) => {
+    console.error('company task cards failed:', err && err.message);
+  });
 }
 
 // ---------------------------------------------------------------------------

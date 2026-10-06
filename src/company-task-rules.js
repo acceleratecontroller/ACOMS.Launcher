@@ -14,27 +14,32 @@
 //    goes away with a little note first and says JD has claimed this, and
 //    then it fades out."
 //
-// How each of those is met, and where:
+// The requirement is a STATE, not an event: "while this task is unclaimed, a
+// card is on screen". So every poll that answers is reconciled against what
+// is on screen (planCompanyCards):
 //
-//   pops up, stays until clicked  — a STICKY card, keyed by the task (not
-//                                   the feed id), so a re-pop replaces the
-//                                   card instead of stacking a second one.
-//   again every 4 hours           — Controller rolls the feed id every four
-//                                   hours (company:<task>:<generation>), so
-//                                   announce-rules sees it as new. No timer
-//                                   here; every machine agrees with the
-//                                   server's clock.
-//   click → someone else has it   — the click asks Controller for the task's
-//                                   LIVE state first (clickOutcome below),
-//                                   and only opens the app if it is still
-//                                   up for grabs, or already yours.
-//   taken while the card is up    — on each poll, a card whose task has left
-//                                   the feed is swapped for the "<name> has
-//                                   claimed this" note (cardsToRetire).
+//   task in feed, no card         → show a sticky card (also after a restart
+//                                    or a reboot — the task is still there)
+//   task in feed, card up,
+//     feed generation moved on    → show it again (same card, beeps again):
+//                                    the 4-hour re-pop. Controller rolls the
+//                                    generation in the feed id; no timer here
+//   card up, task left the feed   → someone claimed / finished it: swap the
+//                                    card for a note and let it fade
+//   person closed the card (×)    → leave it down until the NEXT generation,
+//                                    not forever: the nag was asked for
+//   more than a few unclaimed     → ONE sticky summary card for the lot,
+//                                    never a stack that evicts itself
 //
 // Kept free of Electron, like announce-rules.js, so it can be unit-tested.
 
 const KIND = 'company-task';
+
+// Above this many unclaimed tasks, one summary card instead of one each. The
+// pop-up stack holds four cards; four sticky company cards would evict each
+// other every generation and chat would have nowhere to land.
+const MAX_INDIVIDUAL = 3;
+const SUMMARY_KEY = 'all';
 
 // The feed items that are company tasks, with the fields the cards need.
 function companyTaskItems(items) {
@@ -44,6 +49,7 @@ function companyTaskItems(items) {
     .map((i) => ({
       id: String(i.id),
       taskId: String(i.taskId || taskIdFromFeedId(i.id) || ''),
+      generation: generationFromFeedId(i.id),
       title: String(i.title || ''),
       subtitle: i.subtitle ? String(i.subtitle) : '',
       path: i.path ? String(i.path) : '',
@@ -52,11 +58,15 @@ function companyTaskItems(items) {
     .filter((i) => i.taskId);
 }
 
-// company:<taskId>:<generation> → taskId. Defensive: an older Controller
-// without `taskId` on the item still works.
+// company:<taskId>:<generation>
 function taskIdFromFeedId(id) {
   const m = /^company:([^:]+):\d+$/.exec(String(id || ''));
   return m ? m[1] : null;
+}
+
+function generationFromFeedId(id) {
+  const m = /^company:[^:]+:(\d+)$/.exec(String(id || ''));
+  return m ? Number(m[1]) : 0;
 }
 
 // The stable key a card is shown under. The feed id carries the nag
@@ -65,30 +75,78 @@ function cardKey(taskId) {
   return `company-task:${taskId}`;
 }
 
-// Cards currently on screen whose task is NO LONGER in the feed — somebody
-// claimed it, finished it, or it was withdrawn. Those cards should be swapped
-// for a short note and let fade. Only judged when the poll actually answered
-// (a 401 or an outage says nothing about the tasks).
+// What to do with the cards after a poll that ANSWERED (a 401 or an outage
+// says nothing about the tasks and must not touch them).
 //
-//   shownTaskIds — task ids with a card up right now
-//   feedItems    — companyTaskItems(result.items) of a poll that answered
-function cardsToRetire(shownTaskIds, feedItems) {
-  const live = new Set((feedItems || []).map((i) => i.taskId));
-  return (shownTaskIds || []).filter((id) => !live.has(id));
+//   feedItems — companyTaskItems(result.items)
+//   shown     — { taskId: generation } for every individual card up now
+//   dismissed — { taskId: generation } cards the person closed with ×
+//   summary   — the signature of the summary card if one is up, else null
+//   quiet     — quiet hours / muted: raise nothing new, still retire
+//
+// Returns:
+//   mode      — 'individual' | 'summary'
+//   show      — items to show (new, or re-popped: generation moved on)
+//   retire    — taskIds whose card should become a note and fade
+//   summary   — { count, signature } to show, or null
+//   dropSummary — true when the summary card should come down
+function planCompanyCards({ feedItems, shown, dismissed, summary, quiet }) {
+  const feed = Array.isArray(feedItems) ? feedItems : [];
+  const up = shown && typeof shown === 'object' ? shown : {};
+  const closed = dismissed && typeof dismissed === 'object' ? dismissed : {};
+  const live = new Map(feed.map((i) => [i.taskId, i]));
+
+  // Cards up for tasks that are no longer unclaimed.
+  const retire = Object.keys(up).filter((taskId) => !live.has(taskId));
+
+  if (feed.length > MAX_INDIVIDUAL) {
+    // Summary mode: every individual card comes down (silently — they are
+    // folded into the one card, nobody claimed them), one card for the lot.
+    const signature = feed
+      .map((i) => `${i.taskId}:${i.generation}`)
+      .sort()
+      .join(',');
+    const changed = signature !== summary;
+    return {
+      mode: 'summary',
+      show: [],
+      retire,
+      fold: Object.keys(up).filter((taskId) => live.has(taskId)),
+      summary: !quiet && changed ? { count: feed.length, signature } : null,
+      dropSummary: false
+    };
+  }
+
+  const show = quiet
+    ? []
+    : feed.filter((i) => {
+        if (closed[i.taskId] !== undefined && closed[i.taskId] >= i.generation) return false;
+        return up[i.taskId] === undefined || up[i.taskId] < i.generation;
+      });
+
+  return {
+    mode: 'individual',
+    show,
+    retire,
+    fold: [],
+    summary: null,
+    dropSummary: summary !== null && summary !== undefined
+  };
 }
 
 // What to do when a company-task card is clicked, given Controller's live
 // answer for that task (GET /api/launcher/tasks/<id>), or the failure to get
 // one.
 //
-//   state  — { open, claimed, claimedByName, mine } | null (404 / no answer)
-//   error  — true when the request itself failed (network, 5xx)
+//   state  — { open, claimed, claimedByName, mine } | null (404: task gone)
+//   error  — true when the request itself failed (network, 5xx, a Controller
+//            without the route)
 //
 // Returns { action: 'open' | 'note', message? }:
 //   open — go to the queue with this task rung (unclaimed, or already mine;
 //          ALSO on error — an unreachable Controller must not turn a click
 //          into nothing, the app is still the right place to go)
-//   note — do not open; replace the card with `message` and let it fade
+//   note — do not open; show `message` briefly instead
 function clickOutcome({ state, error } = {}) {
   if (error || !state) {
     return error
@@ -105,19 +163,25 @@ function clickOutcome({ state, error } = {}) {
   return { action: 'open' };
 }
 
-// The note shown when a task leaves the feed between polls.
+// The note shown when a task leaves the feed between polls. `null` means
+// take the card down with no note — the task is still open and unclaimed
+// (the feed was inconsistent: a rollback, a role change), nothing to report.
 function retiredMessage(state) {
   if (state && state.open === false) return 'This task is done';
   if (state && state.claimed) return `${state.claimedByName || 'Someone'} has claimed this`;
+  if (state && state.open === true && !state.claimed) return null;
   return 'This task is no longer in the queue';
 }
 
 module.exports = {
   KIND,
+  MAX_INDIVIDUAL,
+  SUMMARY_KEY,
   companyTaskItems,
   taskIdFromFeedId,
+  generationFromFeedId,
   cardKey,
-  cardsToRetire,
+  planCompanyCards,
   clickOutcome,
   retiredMessage
 };

@@ -119,11 +119,15 @@ plan view made", "approve this job request", "this certificate expires soon".
 They sit in Controller's **ACOMS Tasks** queue until an admin or manager
 takes one. The launcher makes sure nobody misses them:
 
-- A new unclaimed task **pops up on every admin's and manager's PC** as a card
-  that **stays on screen until it is clicked**.
+- An unclaimed task **has a card on every admin's and manager's PC** that
+  **stays on screen until it is clicked** — and comes back after a restart or
+  a reboot, because the task is still unclaimed. Closing it with × keeps it
+  down for a while, not for good.
 - If nobody has claimed it after **four hours**, it pops up again, and keeps
   doing so until someone does. (The server rolls the task's id every four
   hours; the launcher has no timer of its own, so every PC agrees.)
+- More than three unclaimed at once become **one card with the count**, so the
+  corner never fills up with cards pushing each other off.
 - **Click it** and the launcher first asks Controller whether it is still up
   for grabs. If it is, or if it is already yours, the queue opens with that
   task highlighted and an "I'll take it" button ready. If **someone else got
