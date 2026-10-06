@@ -39,6 +39,10 @@ let seq = 0;
 let hovering = false;
 const timers = new Map(); // card id -> timeout
 const clickHandlers = new Map(); // card id -> () => void
+// card id -> () => void, run ONLY when the person closes the card with ×.
+// A card replaced by a newer one under the same key, evicted by the cap, or
+// taken down by code did not get dealt with — nobody is told.
+const dismissHandlers = new Map();
 
 function toWire(card) {
   return {
@@ -153,12 +157,29 @@ function arm(card, ms) {
   );
 }
 
-function dismiss(id) {
+function dismiss(id, { byUser = false } = {}) {
   clearTimeout(timers.get(id));
   timers.delete(id);
   clickHandlers.delete(id);
+  const onDismiss = dismissHandlers.get(id);
+  dismissHandlers.delete(id);
   cards = removeCard(cards, id);
   sync();
+  if (byUser && typeof onDismiss === 'function') {
+    try {
+      onDismiss();
+    } catch (err) {
+      console.error('popup dismiss handler failed:', err.message);
+    }
+  }
+}
+
+// Take down the card shown under `key`, if any, with no note. The caller's
+// own code is doing it, so onDismiss does not run.
+function dismissKey(key) {
+  if (!key) return;
+  const id = `k:${key}`;
+  if (cards.some((c) => c.id === id)) dismiss(id);
 }
 
 // Show a card.
@@ -170,6 +191,7 @@ function dismiss(id) {
 //   key         — optional stable id: showing the same key again replaces the
 //                 card instead of stacking a second one.
 //   onClick     — what clicking the card does.
+//   onDismiss   — runs only when the person closes the card with ×.
 function show({
   title,
   body = '',
@@ -179,7 +201,8 @@ function show({
   key,
   name,
   badge,
-  onClick
+  onClick,
+  onDismiss
 } = {}) {
   if (!title) return null;
 
@@ -203,11 +226,14 @@ function show({
       clearTimeout(timers.get(old));
       timers.delete(old);
       clickHandlers.delete(old);
+      dismissHandlers.delete(old);
     }
   }
 
   if (typeof onClick === 'function') clickHandlers.set(id, onClick);
   else clickHandlers.delete(id);
+  if (typeof onDismiss === 'function') dismissHandlers.set(id, onDismiss);
+  else dismissHandlers.delete(id);
 
   arm(card, DURATION_MS);
   sync();
@@ -226,6 +252,7 @@ function dismissKind(kind) {
     clearTimeout(timers.get(id));
     timers.delete(id);
     clickHandlers.delete(id);
+    dismissHandlers.delete(id);
     cards = removeCard(cards, id);
   }
   sync();
@@ -244,7 +271,7 @@ function init() {
     }
   });
 
-  ipcMain.on('popup:dismiss', (_event, id) => dismiss(id));
+  ipcMain.on('popup:dismiss', (_event, id) => dismiss(id, { byUser: true }));
 
   // Resting the mouse on the stack holds it; nothing vanishes from under a
   // cursor that was about to click it.
@@ -266,4 +293,4 @@ function dispose() {
   win = null;
 }
 
-module.exports = { init, dispose, show, dismiss, dismissKind };
+module.exports = { init, dispose, show, dismiss, dismissKey, dismissKind };
