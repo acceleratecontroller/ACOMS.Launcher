@@ -112,6 +112,28 @@ The header line summarises the total, the tray tooltip carries it too, and the
 tray menu has **Check portals now** if you don't want to wait for the next
 five-minute tick.
 
+### ACOMS Tasks (company tasks)
+
+Some tasks belong to the company rather than to a person — "this job needs a
+plan view made", "approve this job request", "this certificate expires soon".
+They sit in Controller's **ACOMS Tasks** queue until an admin or manager
+takes one. The launcher makes sure nobody misses them:
+
+- A new unclaimed task **pops up on every admin's and manager's PC** as a card
+  that **stays on screen until it is clicked**.
+- If nobody has claimed it after **four hours**, it pops up again, and keeps
+  doing so until someone does. (The server rolls the task's id every four
+  hours; the launcher has no timer of its own, so every PC agrees.)
+- **Click it** and the launcher first asks Controller whether it is still up
+  for grabs. If it is, or if it is already yours, the queue opens with that
+  task highlighted and an "I'll take it" button ready. If **someone else got
+  there first**, the card just changes to "*JD has claimed this*" and fades —
+  the app does not open.
+- If someone takes it while the card is sitting on your screen, the next
+  poll swaps the card for that same note and lets it fade.
+
+These cards follow quiet hours and mute like everything else.
+
 ### Turning it down
 
 The **⚙** button in the picker header opens the settings:

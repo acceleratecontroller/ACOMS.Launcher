@@ -31,6 +31,7 @@ const {
   nextFireAt
 } = require('./reminder-schedule');
 const { buildTaskReminder } = require('./task-reminder');
+const companyTasks = require('./company-task-rules');
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const FIRST_POLL_DELAY_MS = 8 * 1000; // let the picker paint first
@@ -144,6 +145,112 @@ async function fetchSummary(portal) {
   }
 }
 
+// A small JSON read through the same session as fetchSummary — used for the
+// company-task click check. Resolves { status, data } or { error } and never
+// throws; the caller decides what a failure means.
+async function fetchJson(portal, relativePath) {
+  let url;
+  try {
+    url = new URL(relativePath, portal.url).toString();
+  } catch {
+    return { error: 'bad url' };
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await net.fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+      redirect: 'manual',
+      signal: controller.signal
+    });
+    if (res.type === 'opaqueredirect' || res.status === 0) return { error: 'signIn' };
+    if (res.status === 404) return { status: 404, data: null };
+    if (!res.ok) return { error: `HTTP ${res.status}` };
+    return { status: res.status, data: await res.json() };
+  } catch (err) {
+    return { error: (err && err.message) || 'unreachable' };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ACOMS Tasks — company-task cards
+// ---------------------------------------------------------------------------
+// The rules (what is a company task, when a card retires, what a click does)
+// live in company-task-rules.js. This is the Electron side: the sticky card,
+// the live check on click, the swap-to-note when someone else takes it.
+
+// taskId -> { portalId, item } for every company-task card on screen.
+const companyCards = new Map();
+
+function showCompanyCard(portal, item) {
+  companyCards.set(item.taskId, { portalId: portal.id, item });
+  popup.show({
+    kind: 'reminder',
+    label: 'ACOMS task — unclaimed',
+    badge: 'A',
+    title: item.title,
+    body: item.subtitle || 'Click to take it',
+    // Stays until clicked or until someone else takes it (decision 1).
+    sticky: true,
+    // Keyed by TASK: the 4-hourly re-pop replaces this card (and beeps
+    // again) rather than stacking a second one.
+    key: companyTasks.cardKey(item.taskId),
+    onClick: () => {
+      handleCompanyClick(portal, item).catch(() => {});
+    }
+  });
+}
+
+// Replace the card with a short, non-sticky note and let it fade.
+function retireCompanyCard(taskId, message) {
+  const entry = companyCards.get(taskId);
+  companyCards.delete(taskId);
+  if (!entry) return;
+  popup.show({
+    kind: 'reminder',
+    label: 'ACOMS task',
+    badge: 'A',
+    title: entry.item.title,
+    body: message,
+    sticky: false,
+    key: companyTasks.cardKey(taskId)
+  });
+}
+
+async function handleCompanyClick(portal, item) {
+  const res = await fetchJson(portal, `/api/launcher/tasks/${encodeURIComponent(item.taskId)}`);
+  const outcome = companyTasks.clickOutcome({
+    state: res.data || null,
+    error: Boolean(res.error)
+  });
+  if (outcome.action === 'open') {
+    companyCards.delete(item.taskId);
+    popup.dismiss(`k:${companyTasks.cardKey(item.taskId)}`);
+    if (openPortalAt) openPortalAt(portal.id, resolveItemUrl(portal, item));
+    return;
+  }
+  retireCompanyCard(item.taskId, outcome.message);
+}
+
+// After a poll that answered: any card whose task has left the feed gets
+// swapped for "<name> has claimed this" (or "done") and fades.
+async function retireStaleCompanyCards(portal, result) {
+  if (result.state !== 'ok') return;
+  const shown = [...companyCards.entries()]
+    .filter(([, v]) => v.portalId === portal.id)
+    .map(([taskId]) => taskId);
+  if (shown.length === 0) return;
+  const gone = companyTasks.cardsToRetire(shown, companyTasks.companyTaskItems(result.items));
+  for (const taskId of gone) {
+    const res = await fetchJson(portal, `/api/launcher/tasks/${encodeURIComponent(taskId)}`);
+    retireCompanyCard(taskId, companyTasks.retiredMessage(res.data || null));
+  }
+}
+
 // The launcher's own pop-up card, not an OS notification — see popup.js.
 function notify(portal, title, body, targetUrl) {
   popup.show({
@@ -188,7 +295,15 @@ function announce(portal, result) {
   if (decision.announce.length === 0) return;
 
   const freshSet = new Set(decision.announce);
-  const newItems = actionItems.filter((i) => freshSet.has(i.id));
+  const freshItems = actionItems.filter((i) => freshSet.has(i.id));
+
+  // Company tasks: one sticky card each, always, never folded into a count —
+  // each is something a specific person has to decide to take.
+  for (const item of companyTasks.companyTaskItems(freshItems)) {
+    showCompanyCard(portal, item);
+  }
+  const newItems = freshItems.filter((i) => i.kind !== companyTasks.KIND);
+  if (newItems.length === 0) return;
 
   if (newItems.length === 1) {
     const item = newItems[0];
@@ -222,6 +337,7 @@ async function pollOne(portal) {
   result.portalId = portal.id;
   results.set(portal.id, result);
   announce(portal, result);
+  await retireStaleCompanyCards(portal, result).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
