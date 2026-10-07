@@ -8,6 +8,7 @@
   --muted: #8a99a8;
   --border: #2f3f50;
   --chat: #3b82f6;
+  --update: #22c55e;
   --portal: #22c55e;
   --reminder: #f59e0b;
 }
@@ -65,6 +66,10 @@ body {
 
 .card--chat {
   --accent: var(--chat);
+}
+
+.card--update {
+  --accent: var(--update);
 }
 
 .card--reminder {

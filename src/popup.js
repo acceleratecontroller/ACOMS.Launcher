@@ -186,7 +186,7 @@ function dismissKey(key) {
 //   title, body — what it says. `name` (optional) is whose initial goes in the
 //                 badge, defaulting to the title; `badge` sets it outright.
 //   label       — the small line above the title: where this came from.
-//   kind        — 'chat' | 'portal' | 'reminder'; only changes the accent.
+//   kind        — 'chat' | 'portal' | 'reminder' | 'update'; only changes the accent.
 //   sticky      — stays until clicked or dismissed (reminders).
 //   key         — optional stable id: showing the same key again replaces the
 //                 card instead of stacking a second one.
