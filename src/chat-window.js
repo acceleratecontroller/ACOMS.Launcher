@@ -26,6 +26,18 @@ const replyEl = document.getElementById('reply');
 const taskPanelEl = document.getElementById('taskpanel');
 const Files = window.acomsChatFiles;
 const Questions = window.acomsChatQuestions;
+const Presence = window.acomsChatPresence;
+
+// Green = online and active, orange = online but idle 5+ min, grey = offline.
+function presenceDot(person) {
+  const p = Presence.presenceOf(person);
+  const dot = el(
+    'span',
+    `presence${p.state === 'active' ? ' presence--online' : p.state === 'idle' ? ' presence--idle' : ''}`
+  );
+  dot.title = p.state === 'active' ? 'Online' : p.label.charAt(0).toUpperCase() + p.label.slice(1);
+  return dot;
+}
 const TaskParse = window.acomsChatTaskParse;
 
 let state = null;
@@ -123,11 +135,20 @@ function renderPeople() {
     const btn = el('button', `person${isActiveRow(row) ? ' person--active' : ''}`);
     btn.type = 'button';
 
-    const dot = el('span', `presence${row.person.online ? ' presence--online' : ''}`);
-    dot.title = row.person.online ? 'Online' : 'Offline';
+    const dot = presenceDot(row.person);
 
     const text = el('span', 'person__text');
-    text.append(el('span', 'person__name', row.person.name));
+    const nameEl = el('span', 'person__name', row.person.name);
+    const presence = Presence.presenceOf(row.person);
+    if (presence.state === 'idle') nameEl.append(el('span', 'person__idle', ` · ${presence.label}`));
+    const latest = Presence.latestVersion(state.people, state.versions || []);
+    const old = Presence.behindLabel(row.person, latest);
+    if (old) {
+      const tag = el('span', 'person__old', ` · ${old} old`);
+      tag.title = `On Launcher ${row.person.appVersion} — the latest is ${latest}`;
+      nameEl.append(tag);
+    }
+    text.append(nameEl);
     const last = row.conversation && row.conversation.lastMessage;
     if (isTypingIn(row.conversation)) {
       text.append(el('span', 'person__last person__last--typing', 'typing…'));
@@ -179,12 +200,12 @@ function renderHeader() {
     : null;
   const typing = isTypingIn(conv);
   headerEl.append(
-    el('span', `presence${person.online ? ' presence--online' : ''}`),
+    presenceDot(person),
     el('h2', 'thread__name', person.name),
     el(
       'span',
       `thread__status${typing ? ' thread__status--typing' : ''}`,
-      typing ? 'typing…' : person.online ? 'online' : 'offline'
+      typing ? 'typing…' : Presence.presenceOf(person).label
     )
   );
 }

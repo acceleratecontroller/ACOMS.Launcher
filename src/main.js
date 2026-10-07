@@ -825,7 +825,8 @@ if (!gotLock) {
     chat.init({
       portals,
       config: chatConfig,
-      openChat: (conversationId) => openChat(conversationId)
+      openChat: (conversationId) => openChat(conversationId),
+      newerVersion: () => updater.snapshot().newVersion
     });
 
     // Start with the computer (on unless switched off in the tray). Started
