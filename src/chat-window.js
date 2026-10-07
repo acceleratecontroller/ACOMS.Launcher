@@ -1145,9 +1145,9 @@ function renderComposerMode() {
   composerEl.classList.toggle('composer--task', mode === 'task');
   inputEl.placeholder =
     mode === 'question'
-      ? 'Ask your important question — Enter to send'
+      ? 'are you sure this is important enough to go here?'
       : mode === 'task'
-        ? 'What needs doing? e.g. chase the A1234 PO by 2pm Thursday'
+        ? "don't do it"
         : replyTo && replyTo.answering
           ? 'Write your answer — Enter to send'
           : 'words go here stupid'; // Dion 2026-10-07: the long hint wrapped and he didn't like it
