@@ -42,6 +42,15 @@ contextBridge.exposeInMainWorld('acomsChat', {
 
   // Close my own important question. Resolves to { ok, error? }.
   closeQuestion: (id) => ipcRenderer.invoke('chat:close-question', id),
+  // Rooms (2026-10-07). Each resolves to { ok, room?, error? }. Only a room
+  // admin (state.me.canManageRooms) can create or manage; anyone can mute.
+  createRoom: (input) => ipcRenderer.invoke('chat:room-create', input),
+  getRoom: (id) => ipcRenderer.invoke('chat:room-get', id),
+  updateRoom: (id, changes) => ipcRenderer.invoke('chat:room-update', id, changes),
+  addRoomMember: (id, identityId) => ipcRenderer.invoke('chat:room-add', id, identityId),
+  removeRoomMember: (id, identityId) => ipcRenderer.invoke('chat:room-remove', id, identityId),
+  muteRoom: (id, muted) => ipcRenderer.invoke('chat:room-mute', id, muted),
+
   // The Task Manager's categories (also arrive as state.taskLabels).
   taskLabels: () => ipcRenderer.invoke('chat:task-labels'),
 

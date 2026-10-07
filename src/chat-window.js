@@ -27,6 +27,12 @@ const taskPanelEl = document.getElementById('taskpanel');
 const Files = window.acomsChatFiles;
 const Questions = window.acomsChatQuestions;
 const Presence = window.acomsChatPresence;
+const Rooms = window.acomsChatRooms;
+const roomsEl = document.getElementById('rooms');
+const purposeEl = document.getElementById('room-purpose');
+const mentionsEl = document.getElementById('mentions');
+const roomMenuEl = document.getElementById('room-menu');
+const roomDialogEl = document.getElementById('room-dialog');
 
 // Green = online and active, orange = online but idle 5+ min, grey = offline.
 function presenceDot(person) {
@@ -186,6 +192,8 @@ function activePerson() {
   if (!a) return null;
   if (a.toIdentityId) return state.people.find((p) => p.identityId === a.toIdentityId) || null;
   const conv = state.conversations.find((c) => c.id === a.conversationId);
+  // A room is a place, not a person: it has no one "other" to show.
+  if (conv && conv.room) return null;
   const other = conv && conv.with && conv.with[0];
   if (!other) return null;
   return state.people.find((p) => p.identityId === other.identityId) || { ...other, online: false };
@@ -193,6 +201,10 @@ function activePerson() {
 
 function renderHeader() {
   headerEl.replaceChildren();
+  if (activeRoom()) {
+    renderRoomHeader(activeRoom());
+    return;
+  }
   const person = activePerson();
   if (!person) return;
   const conv = state.active.conversationId
@@ -336,6 +348,9 @@ function renderMessage(m, readAt) {
     bubble.append(el('div', 'msg__body', mine ? 'You deleted this message' : 'Message deleted'), time);
     return bubble;
   }
+
+  // In a room, other people's messages say who sent them.
+  if (!mine && activeRoom()) bubble.append(el('div', 'msg__sender', m.senderName || 'Someone'));
 
   // Send modes: what kind it is, and what it is a reply to.
   const openQuestion = m.kind === 'question' && !m.answeredAt;
@@ -771,7 +786,8 @@ setInterval(updateSinceLast, 30 * 1000);
 function renderMessages() {
   const msgs = state.activeMessages;
   // Their read time is part of the key: a tick appearing IS a change to draw.
-  const readAt = window.acomsChatSeen.otherReadAt(state.conversations, state.active);
+  // No seen ticks in a room: "seen" by whom?
+  const readAt = activeRoom() ? null : window.acomsChatSeen.otherReadAt(state.conversations, state.active);
   // Edits and deletes change a message without changing the count, and the
   // edit box / delete question are drawn in the thread too.
   const changes = msgs
@@ -802,7 +818,7 @@ function renderMessages() {
     return;
   }
   if (msgs.length === 0) {
-    messagesEl.append(el('p', 'messages__empty', 'No messages yet. Say hello.'));
+    messagesEl.append(el('p', 'messages__empty', activeRoom() ? 'Nothing here yet.' : 'No messages yet. Say hello.'));
     return;
   }
 
@@ -904,7 +920,9 @@ function render() {
   meEl.textContent = state.me ? `Signed in as ${state.me.name}` : '';
   renderNotice();
   renderPeople();
+  renderRooms();
   renderHeader();
+  renderPurpose();
   renderQuestions();
   renderMessages();
 
@@ -1140,6 +1158,8 @@ function buildTaskPanel() {
 }
 
 function renderComposerMode() {
+  // Moved into a room that doesn't allow the mode in hand: back to plain text.
+  if (!Rooms.allowedModes(activeConversation()).includes(mode)) mode = 'text';
   const person = activePerson();
   const name = person ? person.name.split(' ')[0] : 'them';
   const labelsKey = (state.taskLabels || []).join('|');
@@ -1407,9 +1427,12 @@ inputEl.addEventListener('keydown', (event) => {
     submit();
   } else if (event.key === 'Tab' && !event.ctrlKey && !event.altKey && !event.metaKey) {
     // Tab: normal -> important question -> task -> normal. Shift+Tab goes back.
+    // A room cycles only the modes it allows (The Void: none).
     event.preventDefault();
-    const i = MODES.indexOf(mode);
-    setMode(MODES[(i + (event.shiftKey ? MODES.length - 1 : 1)) % MODES.length]);
+    const modes = Rooms.allowedModes(activeConversation());
+    if (modes.length === 1) return;
+    const i = Math.max(0, modes.indexOf(mode));
+    setMode(modes[(i + (event.shiftKey ? modes.length - 1 : 1)) % modes.length]);
   } else if (event.key === 'Escape' && (mode !== 'text' || replyTo)) {
     event.preventDefault();
     resetComposer();
@@ -1432,6 +1455,534 @@ inputEl.addEventListener('keydown', (event) => {
   event.preventDefault();
   startEdit(last);
 });
+
+// ── Rooms (Dion 2026-10-07) ────────────────────────────────────────────────
+// A room is a place with a purpose, not a group chat. Each one is a soft,
+// edgeless, slowly turning wormhole in the bottom-left corner — not a row in
+// the list. It never shows a count: grey nothing new, blue unread, red
+// someone @mentioned you (red wins until read). Inside: the purpose pinned at
+// the top, sender names, @name suggestions, and a mute just for you. The room
+// admin right-clicks a wormhole to make or manage rooms.
+
+function activeConversation() {
+  const a = state && state.active;
+  if (!a || !a.conversationId) return null;
+  return state.conversations.find((c) => c.id === a.conversationId) || null;
+}
+
+function activeRoom() {
+  const c = activeConversation();
+  return c && c.room ? c : null;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const WORMHOLE_RINGS = [
+  [50.0, 50.0, 46.0, 2.4, 0.2],
+  [51.1, 49.6, 41.6, 2.2, 0.3],
+  [52.2, 49.1, 37.2, 2.0, 0.4],
+  [53.3, 48.7, 32.8, 1.9, 0.5],
+  [54.4, 48.2, 28.4, 1.7, 0.6],
+  [55.5, 47.8, 24.0, 1.5, 0.6],
+  [56.6, 47.4, 19.6, 1.3, 0.7],
+  [57.7, 46.9, 15.2, 1.1, 0.8],
+  [58.8, 46.5, 10.8, 1.0, 0.9]
+];
+// Stroke icons for rooms that aren't The Void (24-unit paths).
+const ROOM_ICON_PATHS = {
+  wrench: 'M14.7 6.3a4 4 0 0 0 5 5L21 13l-8 8-3-3 8-8-1.7-1.3a4 4 0 0 1-5-5zM3 21l6-6',
+  megaphone: 'M3 11v2l13 5V6zM16 9a3 3 0 0 1 0 6M7 14l1 5h3l-1-4',
+  truck: 'M2 6h12v10H2zM14 10h4l3 3v3h-7zM6 18a2 2 0 1 0 0 .01M17 18a2 2 0 1 0 0 .01',
+  coffee: 'M4 8h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM17 10h1a3 3 0 0 1 0 6h-1M8 2v3M12 2v3'
+};
+let svgIds = 0;
+
+function svg(tag, attrs) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) node.setAttribute(k, String(v));
+  return node;
+}
+
+// The room's mark, coloured by its state through CSS (currentColor).
+function roomMark(icon, roomState, size) {
+  if (icon && ROOM_ICON_PATHS[icon]) {
+    const s = svg('svg', { viewBox: '0 0 24 24', width: size * 0.62, height: size * 0.62, 'aria-hidden': 'true' });
+    s.classList.add('wormhole', `wormhole--${roomState}`);
+    s.append(
+      svg('path', {
+        d: ROOM_ICON_PATHS[icon],
+        fill: 'none',
+        stroke: 'currentColor',
+        'stroke-width': 2,
+        'stroke-linecap': 'round',
+        'stroke-linejoin': 'round'
+      })
+    );
+    return s;
+  }
+  const id = `wh${++svgIds}`;
+  const s = svg('svg', { viewBox: '0 0 100 100', width: size, height: size, 'aria-hidden': 'true' });
+  s.classList.add('wormhole', `wormhole--${roomState}`);
+  const defs = svg('defs');
+  const grad = svg('radialGradient', { id: `${id}f`, cx: '50%', cy: '50%', r: '50%' });
+  grad.append(
+    svg('stop', { offset: '0.45', 'stop-color': '#fff' }),
+    svg('stop', { offset: '1', 'stop-color': '#fff', 'stop-opacity': '0' })
+  );
+  const mask = svg('mask', { id: `${id}m`, maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: 100, height: 100 });
+  mask.append(svg('rect', { width: 100, height: 100, fill: `url(#${id}f)` }));
+  defs.append(grad, mask);
+  const outer = svg('g', { mask: `url(#${id}m)` });
+  const spin = svg('g');
+  for (const [cx, cy, r, w, o] of WORMHOLE_RINGS) {
+    spin.append(svg('circle', { cx, cy, r, fill: 'none', stroke: 'currentColor', 'stroke-width': w, opacity: o }));
+  }
+  spin.append(
+    svg('animateTransform', {
+      attributeName: 'transform',
+      type: 'rotate',
+      from: '0 50 50',
+      to: '360 50 50',
+      dur: '7s',
+      repeatCount: 'indefinite'
+    })
+  );
+  outer.append(spin);
+  s.append(defs, outer);
+  return s;
+}
+
+const STATE_WORDS = { quiet: 'up to date', unread: 'new messages', mentioned: 'you were mentioned' };
+let drawnRoomsKey = '';
+
+function renderRooms() {
+  const rooms = (state.conversations || []).filter((c) => c.room);
+  const admin = Boolean(state.me && state.me.canManageRooms);
+  const active = activeRoom();
+  const key = rooms
+    .map((c) => `${c.id}:${c.room.name}:${c.room.icon}:${Rooms.roomState(c)}:${c.muted}`)
+    .join('|') + `|${active ? active.id : ''}|${admin}`;
+  if (key === drawnRoomsKey) return;
+  drawnRoomsKey = key;
+
+  roomsEl.replaceChildren();
+  // The admin always gets the corner, so there is somewhere to right-click
+  // to make the first room.
+  roomsEl.hidden = rooms.length === 0 && !admin;
+  for (const c of rooms) {
+    const st = Rooms.roomState(c);
+    const btn = el('button', `room-door${active && active.id === c.id ? ' room-door--active' : ''}`);
+    btn.type = 'button';
+    btn.title = `${c.room.name} — ${STATE_WORDS[st]}${c.muted ? ' (muted)' : ''}`;
+    btn.setAttribute('aria-label', btn.title);
+    btn.append(roomMark(c.room.icon, st, 36));
+    btn.addEventListener('click', () => {
+      if (!active || active.id !== c.id) clearPending();
+      window.acomsChat.selectConversation(c.id);
+      inputEl.focus();
+    });
+    btn.addEventListener('contextmenu', (event) => {
+      if (!admin) return;
+      event.preventDefault();
+      openRoomMenu(event.clientX, event.clientY, c);
+    });
+    roomsEl.append(btn);
+  }
+  if (rooms.length === 0 && admin) {
+    const hint = el('button', 'room-door room-door--new', '+');
+    hint.type = 'button';
+    hint.title = 'Make a room';
+    hint.setAttribute('aria-label', 'Make a room');
+    hint.addEventListener('click', () => openRoomDialog(null));
+    roomsEl.append(hint);
+  }
+}
+
+function renderRoomHeader(c) {
+  const members = ['You', ...(c.with || []).map((p) => p.name)];
+  const title = el('div', 'thread__room');
+  title.append(el('h2', 'thread__name', c.room.name), el('span', 'thread__status', `${members.length} members · ${members.join(', ')}`));
+
+  const mute = el('button', `thread__tool${c.muted ? ' thread__tool--on' : ''}`, c.muted ? 'Muted' : 'Mute');
+  mute.type = 'button';
+  mute.title = c.muted ? 'Muted for you — no pop-ups from this room. Click to unmute.' : 'Mute this room for you';
+  mute.setAttribute('aria-pressed', String(Boolean(c.muted)));
+  mute.addEventListener('click', () => window.acomsChat.muteRoom(c.id, !c.muted));
+
+  headerEl.append(roomMark(c.room.icon, 'quiet', 30), title, mute);
+  if (state.me && state.me.canManageRooms) {
+    const manage = el('button', 'thread__tool', 'Manage');
+    manage.type = 'button';
+    manage.title = 'Members and settings';
+    manage.addEventListener('click', () => openRoomDialog(c.id));
+    headerEl.append(manage);
+  }
+}
+
+function renderPurpose() {
+  const c = activeRoom();
+  const purpose = c && c.room.purpose;
+  purposeEl.hidden = !purpose;
+  purposeEl.replaceChildren();
+  if (purpose) purposeEl.append(el('b', null, 'What this room is for: '), el('span', null, purpose));
+}
+
+// ── @name suggestions ──────────────────────────────────────────────────────
+
+let mentionAt = null; // { start, query } while the caret is on "@…" in a room
+let mentionList = [];
+let mentionPick = 0;
+
+function roomMembers(c) {
+  return (c.with || []).map((p) => ({ identityId: p.identityId, name: p.name }));
+}
+
+function updateMentions() {
+  const c = activeRoom();
+  mentionAt = c ? Rooms.mentionQuery(inputEl.value, inputEl.selectionStart) : null;
+  mentionList = mentionAt ? Rooms.mentionMatches(roomMembers(c), mentionAt.query, state.me && state.me.identityId) : [];
+  if (mentionList.length === 0) mentionAt = null;
+  mentionPick = Math.min(mentionPick, Math.max(0, mentionList.length - 1));
+  drawMentions();
+}
+
+function drawMentions() {
+  mentionsEl.replaceChildren();
+  mentionsEl.hidden = !mentionAt;
+  if (!mentionAt) return;
+  mentionList.forEach((p, i) => {
+    const opt = el('button', `mentions__item${i === mentionPick ? ' mentions__item--on' : ''}`, p.name);
+    opt.type = 'button';
+    opt.setAttribute('role', 'option');
+    opt.setAttribute('aria-selected', String(i === mentionPick));
+    // mousedown, not click: keep the focus (and the caret) in the box.
+    opt.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      pickMention(i);
+    });
+    mentionsEl.append(opt);
+  });
+}
+
+function pickMention(i) {
+  const p = mentionList[i];
+  if (!p || !mentionAt) return;
+  const r = Rooms.insertMention(inputEl.value, mentionAt, inputEl.selectionStart, p.name);
+  inputEl.value = r.text;
+  inputEl.setSelectionRange(r.caret, r.caret);
+  mentionAt = null;
+  drawMentions();
+  autoGrow();
+  inputEl.focus();
+}
+
+inputEl.addEventListener('input', updateMentions);
+inputEl.addEventListener('click', updateMentions);
+inputEl.addEventListener('blur', () => {
+  mentionAt = null;
+  drawMentions();
+});
+// While suggestions are up, the arrows, Enter, Tab and Esc are theirs — not
+// send, not the Tab send modes. On the FORM in the capture phase: listeners on
+// the box itself run in the order they were added, and send was added first.
+composerEl.addEventListener(
+  'keydown',
+  (event) => {
+    if (!mentionAt) return;
+    const n = mentionList.length;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      mentionPick = (mentionPick + (event.key === 'ArrowDown' ? 1 : n - 1)) % n;
+      drawMentions();
+    } else if (event.key === 'Enter' || event.key === 'Tab') {
+      pickMention(mentionPick);
+    } else if (event.key === 'Escape') {
+      mentionAt = null;
+      drawMentions();
+    } else {
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  },
+  true
+);
+
+// ── The admin's menu and screens ───────────────────────────────────────────
+
+function closeRoomMenu() {
+  roomMenuEl.hidden = true;
+  roomMenuEl.replaceChildren();
+}
+
+function openRoomMenu(x, y, c) {
+  roomMenuEl.replaceChildren();
+  const item = (text, run) => {
+    const b = el('button', 'room-menu__item', text);
+    b.type = 'button';
+    b.setAttribute('role', 'menuitem');
+    b.addEventListener('click', () => {
+      closeRoomMenu();
+      run();
+    });
+    roomMenuEl.append(b);
+  };
+  item(`Manage ${c.room.name}…`, () => openRoomDialog(c.id));
+  item('New room…', () => openRoomDialog(null));
+  roomMenuEl.hidden = false;
+  roomMenuEl.style.left = `${x}px`;
+  roomMenuEl.style.top = `${Math.max(8, y - roomMenuEl.offsetHeight)}px`;
+  roomMenuEl.querySelector('button').focus();
+}
+
+document.addEventListener('mousedown', (event) => {
+  if (!roomMenuEl.hidden && !roomMenuEl.contains(event.target)) closeRoomMenu();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  if (!roomMenuEl.hidden) closeRoomMenu();
+  else if (!roomDialogEl.hidden) closeRoomDialog();
+});
+
+function closeRoomDialog() {
+  roomDialogEl.hidden = true;
+  roomDialogEl.replaceChildren();
+}
+
+function dialogShell(titleText, subText) {
+  roomDialogEl.replaceChildren();
+  const box = el('div', 'room-dialog__box');
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-label', titleText);
+  const head = el('header', 'room-dialog__head');
+  head.append(el('div', 'room-dialog__title', titleText));
+  if (subText) head.append(el('div', 'room-dialog__sub', subText));
+  const body = el('div', 'room-dialog__body');
+  const foot = el('footer', 'room-dialog__foot');
+  const error = el('p', 'room-dialog__error');
+  error.hidden = true;
+  box.append(head, body, error, foot);
+  roomDialogEl.append(box);
+  roomDialogEl.hidden = false;
+  roomDialogEl.onclick = (event) => {
+    if (event.target === roomDialogEl) closeRoomDialog();
+  };
+  const fail = (text) => {
+    error.textContent = text;
+    error.hidden = !text;
+  };
+  return { body, foot, fail };
+}
+
+function button(text, cls, run) {
+  const b = el('button', cls, text);
+  b.type = 'button';
+  b.addEventListener('click', run);
+  return b;
+}
+
+function labelled(text, control) {
+  const label = el('label', 'room-field');
+  label.append(el('span', 'room-field__label', text), control);
+  return label;
+}
+
+function settingsFields(room) {
+  const name = document.createElement('input');
+  name.className = 'room-input';
+  name.maxLength = 40;
+  name.value = room ? room.name : 'The Void';
+
+  const purpose = document.createElement('input');
+  purpose.className = 'room-input';
+  purpose.maxLength = 200;
+  purpose.value = room ? room.purpose : 'Non-work chat. Nothing in here is a job.';
+
+  let icon = room ? room.icon : 'void';
+  const icons = el('div', 'room-icons');
+  const drawIcons = () => {
+    icons.replaceChildren();
+    for (const key of ['void', ...Object.keys(ROOM_ICON_PATHS)]) {
+      const b = el('button', `room-icons__item${key === icon ? ' room-icons__item--on' : ''}`);
+      b.type = 'button';
+      b.setAttribute('aria-label', key);
+      b.setAttribute('aria-pressed', String(key === icon));
+      b.append(roomMark(key, key === icon ? 'unread' : 'quiet', 30));
+      b.addEventListener('click', () => {
+        icon = key;
+        drawIcons();
+      });
+      icons.append(b);
+    }
+  };
+  drawIcons();
+
+  const notify = document.createElement('select');
+  notify.className = 'room-input';
+  for (const [value, text] of [
+    ['count', 'Shows it has news — pops up only when you’re @mentioned'],
+    ['every', 'Pops up on every message']
+  ]) {
+    const o = document.createElement('option');
+    o.value = value;
+    o.textContent = text;
+    notify.append(o);
+  }
+  notify.value = room ? room.notifyMode : 'count';
+
+  const cards = document.createElement('input');
+  cards.type = 'checkbox';
+  cards.checked = room ? room.allowCards : false;
+  const cardsRow = el('label', 'room-check');
+  cardsRow.append(cards, el('span', null, 'Allow important questions (Tab)'));
+
+  const fields = [
+    labelled('Name', name),
+    labelled('Icon', icons),
+    labelled('What this room is for — pinned at the top', purpose),
+    labelled('How it notifies', notify),
+    cardsRow
+  ];
+  const values = () => ({
+    name: name.value,
+    icon,
+    purpose: purpose.value,
+    notifyMode: notify.value,
+    allowCards: cards.checked
+  });
+  return { fields, values, focus: () => name.focus() };
+}
+
+function openRoomDialog(roomId) {
+  closeRoomMenu();
+  if (roomId) manageRoom(roomId);
+  else newRoom();
+}
+
+function newRoom() {
+  const { body, foot, fail } = dialogShell('New room', 'Only you can make rooms. Only the people you add can see it.');
+  const settings = settingsFields(null);
+  const picks = new Set();
+  const people = el('div', 'room-people');
+  for (const p of state.people || []) {
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.addEventListener('change', () => (box.checked ? picks.add(p.identityId) : picks.delete(p.identityId)));
+    const row = el('label', 'room-check');
+    row.append(box, el('span', null, p.name));
+    people.append(row);
+  }
+  body.append(...settings.fields, labelled('Who’s in it — you’re always in', people));
+  body.append(
+    el(
+      'p',
+      'room-dialog__note',
+      'People you add see messages from when they join, not before. They can’t leave — they stay until you remove them — but each can mute it for themselves.'
+    )
+  );
+  const create = button('Create room', 'room-btn room-btn--primary', async () => {
+    create.disabled = true;
+    fail('');
+    const res = await window.acomsChat.createRoom({ ...settings.values(), memberIds: [...picks] });
+    create.disabled = false;
+    if (!res.ok) return fail(res.error);
+    closeRoomDialog();
+    if (res.room && res.room.id) window.acomsChat.selectConversation(res.room.id);
+  });
+  foot.append(button('Cancel', 'room-btn', closeRoomDialog), create);
+  settings.focus();
+}
+
+async function manageRoom(roomId) {
+  const { body, foot, fail } = dialogShell('Manage room');
+  body.append(el('p', 'room-dialog__note', 'Loading…'));
+  const loaded = await window.acomsChat.getRoom(roomId);
+  if (roomDialogEl.hidden) return;
+  body.replaceChildren();
+  if (!loaded.ok) {
+    fail(loaded.error);
+    foot.append(button('Close', 'room-btn', closeRoomDialog));
+    return;
+  }
+  const room = loaded.room;
+  const meId = state.me && state.me.identityId;
+
+  const settings = settingsFields(room);
+  body.append(...settings.fields);
+
+  const list = el('div', 'room-members');
+  const draw = (r) => {
+    list.replaceChildren();
+    for (const m of r.members) {
+      const row = el('div', 'room-members__row');
+      const who = el('span', 'room-members__who', m.name);
+      if (m.identityId === meId) who.append(el('span', 'room-members__note', ' · you'));
+      if (m.muted) who.append(el('span', 'room-members__note', ' · has it muted'));
+      row.append(who);
+      if (m.identityId !== meId) {
+        row.append(
+          button('Remove', 'room-btn room-btn--danger room-btn--small', async () => {
+            fail('');
+            const res = await window.acomsChat.removeRoomMember(room.id, m.identityId);
+            if (!res.ok) return fail(res.error);
+            draw(res.room);
+          })
+        );
+      }
+      list.append(row);
+    }
+    // Add someone not already in it.
+    const outside = (state.people || []).filter((p) => !r.members.some((m) => m.identityId === p.identityId));
+    if (outside.length > 0) {
+      const pick = document.createElement('select');
+      pick.className = 'room-input';
+      for (const p of outside) {
+        const o = document.createElement('option');
+        o.value = p.identityId;
+        o.textContent = p.name;
+        pick.append(o);
+      }
+      const add = el('div', 'room-members__add');
+      add.append(
+        pick,
+        button('Add', 'room-btn room-btn--small', async () => {
+          fail('');
+          const res = await window.acomsChat.addRoomMember(room.id, pick.value);
+          if (!res.ok) return fail(res.error);
+          draw(res.room);
+        })
+      );
+      list.append(add);
+    }
+  };
+  draw(room);
+  body.append(labelled(`Members`, list));
+  body.append(
+    el(
+      'p',
+      'room-dialog__note',
+      'Someone you remove loses the room and its history straight away. Added back, they see messages from when they rejoin.'
+    )
+  );
+
+  const archive = button('Archive room', 'room-btn room-btn--danger', async () => {
+    if (archive.dataset.sure !== 'yes') {
+      archive.dataset.sure = 'yes';
+      archive.textContent = 'Archive — sure?';
+      return;
+    }
+    const res = await window.acomsChat.updateRoom(room.id, { archived: true });
+    if (!res.ok) return fail(res.error);
+    closeRoomDialog();
+  });
+  const save = button('Save', 'room-btn room-btn--primary', async () => {
+    save.disabled = true;
+    fail('');
+    const res = await window.acomsChat.updateRoom(room.id, settings.values());
+    save.disabled = false;
+    if (!res.ok) return fail(res.error);
+    closeRoomDialog();
+  });
+  foot.append(archive, el('span', 'room-dialog__spacer'), button('Close', 'room-btn', closeRoomDialog), save);
+}
 
 async function init() {
   state = await window.acomsChat.getState();

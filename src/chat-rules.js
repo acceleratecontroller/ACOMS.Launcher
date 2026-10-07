@@ -50,21 +50,54 @@ function preview(text) {
 //     Open-but-unfocused still notifies: the window being somewhere behind a
 //     portal is not the same as having read it.
 //
-// There is deliberately NO mute and NO quiet-hours input here. Dion, 2026-09-21:
-// chat is not opt-in — "if you have the launcher installed then you are
-// available to chat", and nobody can turn its notifications off inside the app.
-// A message from a person is not a badge to be tuned out. (The operating
+// There is deliberately NO mute and NO quiet-hours input for a DM. Dion,
+// 2026-09-21: chat is not opt-in — "if you have the launcher installed then you
+// are available to chat", and nobody can turn its notifications off inside the
+// app. A message from a person is not a badge to be tuned out. (The operating
 // system's own Do Not Disturb still applies; that is not ours to override.)
+//
+// Rooms are different (Dion 2026-10-07): a room is a place you visit, not a
+// person writing to you. A "count" room — the default, and The Void — pops up
+// only a message that @mentions you; an "every" room pops up like a DM; and a
+// room you muted pops up nothing at all.
+function roomToasts(m, conversations, meId) {
+  const c = (conversations || []).find((x) => x && x.id === m.conversationId);
+  if (!c || !c.room) return true; // a DM, or not known yet: as before
+  if (c.muted) return false;
+  if (c.room.notifyMode === 'every') return true;
+  return Boolean(meId && Array.isArray(m.mentions) && m.mentions.includes(meId));
+}
+
 function decideMessageToasts({
   incoming = [],
   handledIds = new Set(),
-  windowFocused = false
+  windowFocused = false,
+  conversations = [],
+  meId = null
 } = {}) {
   const fresh = incoming.filter((m) => m && m.id && !handledIds.has(m.id));
   const handled = fresh.map((m) => m.id);
 
-  const toast = windowFocused ? [] : fresh;
+  const toast = windowFocused ? [] : fresh.filter((m) => roomToasts(m, conversations, meId));
   return { toast, handled };
+}
+
+// What a conversation adds to the unread total and the tray: a DM or an
+// "every" room all its unread; a "count" room only its unread @mentions (its
+// wormhole shows the rest); a muted room nothing.
+function unreadWeight(c) {
+  if (!c) return 0;
+  if (!c.room) return c.unread || 0;
+  if (c.muted) return 0;
+  return c.room.notifyMode === 'every' ? c.unread || 0 : c.mentions || 0;
+}
+
+// What a room's wormhole shows: red while an @mention of me is unread (red
+// wins), blue for anything else unread, grey for nothing.
+function roomState(c) {
+  if (c && (c.mentions || 0) > 0) return 'mentioned';
+  if (c && (c.unread || 0) > 0) return 'unread';
+  return 'quiet';
 }
 
 // One message is quoted. Several are counted — a burst of six toasts is how a
@@ -100,12 +133,14 @@ function messageToastText(messages) {
 // message, so what was left unread while the launcher was closed gets ONE
 // summary notification.
 function firstPollToastText(conversations) {
-  const unread = (conversations || []).filter((c) => c && c.unread > 0);
+  const unread = (conversations || []).filter((c) => unreadWeight(c) > 0);
   if (unread.length === 0) return null;
 
-  const total = unread.reduce((n, c) => n + c.unread, 0);
+  const total = unread.reduce((n, c) => n + unreadWeight(c), 0);
   const names = [
-    ...new Set(unread.flatMap((c) => (c.with || []).map((p) => p.name)).filter(Boolean))
+    ...new Set(
+      unread.flatMap((c) => (c.room ? [c.room.name] : (c.with || []).map((p) => p.name))).filter(Boolean)
+    )
   ];
   const from = names.length > 0 ? ` from ${names.join(', ')}` : '';
   return {
@@ -134,6 +169,8 @@ module.exports = {
   pollIntervalMs,
   preview,
   decideMessageToasts,
+  unreadWeight,
+  roomState,
   messageToastText,
   firstPollToastText,
   mergeMessages

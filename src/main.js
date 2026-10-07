@@ -697,6 +697,16 @@ ipcMain.handle('chat:send', (_event, text, files, opts) =>
   chat.send(text, cleanOutgoingFiles(files), opts && typeof opts === 'object' ? opts : {})
 );
 ipcMain.handle('chat:close-question', (_event, id) => chat.closeQuestion(id));
+// Rooms (2026-10-07). The server decides who may make or manage one; these
+// only pass the window's answers on, as plain values.
+const roomId = (id) => (typeof id === 'string' ? id : '');
+const plainObject = (o) => (o && typeof o === 'object' && !Array.isArray(o) ? JSON.parse(JSON.stringify(o)) : {});
+ipcMain.handle('chat:room-create', (_event, input) => chat.createRoom(plainObject(input)));
+ipcMain.handle('chat:room-get', (_event, id) => chat.getRoom(roomId(id)));
+ipcMain.handle('chat:room-update', (_event, id, changes) => chat.updateRoom(roomId(id), plainObject(changes)));
+ipcMain.handle('chat:room-add', (_event, id, identityId) => chat.addRoomMember(roomId(id), roomId(identityId)));
+ipcMain.handle('chat:room-remove', (_event, id, identityId) => chat.removeRoomMember(roomId(id), roomId(identityId)));
+ipcMain.handle('chat:room-mute', (_event, id, muted) => chat.muteRoom(roomId(id), muted === true));
 ipcMain.handle('chat:task-labels', () => chat.loadTaskLabels());
 // Files in chat (chat-files.js). Every argument comes from a renderer, so it
 // is checked here rather than trusted.
