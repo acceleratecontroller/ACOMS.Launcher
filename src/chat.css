@@ -1246,3 +1246,14 @@ a.job:hover {
   color: var(--danger);
   font-weight: 400;
 }
+
+/* Idle (2026-10-07): online, but no keyboard or mouse for 5+ minutes. */
+.presence--idle {
+  border-color: var(--question);
+  background: var(--question);
+}
+.person__idle {
+  color: var(--question);
+  font-size: 11.5px;
+  font-weight: 400;
+}

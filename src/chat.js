@@ -21,7 +21,7 @@
 // in memory and re-read from the server; nothing of what people say to each
 // other is written to launcher-state.json.
 
-const { net } = require('electron');
+const { net, powerMonitor } = require('electron');
 const popup = require('./popup');
 const chatFiles = require('./chat-files');
 const { jobLinkBaseFor } = require('./chat-links');
@@ -255,7 +255,7 @@ async function poll() {
   if (polling) return;
   polling = true;
   try {
-    const res = await request(syncPath, { method: 'POST', body: { since: cursor } });
+    const res = await request(syncPath, { method: 'POST', body: { since: cursor, idleSeconds: idleSeconds() } });
 
     if (!res.ok) {
       // A Controller without the chat routes answers 404 (or 405). That is "not
@@ -321,6 +321,18 @@ async function poll() {
   } finally {
     polling = false;
     schedule();
+  }
+}
+
+// How long since this PC's keyboard or mouse was touched — anywhere, not just
+// in the Launcher — so the other side can show "inactive 15m" (Dion,
+// 2026-10-07). Null if the OS won't say; the server then records "active".
+function idleSeconds() {
+  try {
+    const s = powerMonitor.getSystemIdleTime();
+    return Number.isFinite(s) ? s : null;
+  } catch {
+    return null;
   }
 }
 
