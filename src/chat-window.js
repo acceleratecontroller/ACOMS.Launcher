@@ -20,7 +20,13 @@ const fileInputEl = document.getElementById('file-input');
 const dropEl = document.getElementById('drop');
 const searchEl = document.getElementById('search');
 const searchClearEl = document.getElementById('search-clear');
+const questionsEl = document.getElementById('questions');
+const modeBarEl = document.getElementById('modebar');
+const replyEl = document.getElementById('reply');
+const taskPanelEl = document.getElementById('taskpanel');
 const Files = window.acomsChatFiles;
+const Questions = window.acomsChatQuestions;
+const TaskParse = window.acomsChatTaskParse;
 
 let state = null;
 // What the thread last drew, so a poll that changed nothing doesn't rebuild it
@@ -131,6 +137,12 @@ function renderPeople() {
     }
 
     btn.append(dot, text);
+    const waiting = row.conversation ? questionsFor(row.conversation.id).forMe.length : 0;
+    if (waiting > 0) {
+      const q = el('span', 'qbadge', `❓${waiting > 1 ? waiting : ''}`);
+      q.title = `${waiting} important question${waiting === 1 ? '' : 's'} waiting on you`;
+      btn.append(q);
+    }
     if (row.conversation && row.conversation.unread > 0) {
       btn.append(el('span', 'unread', String(row.conversation.unread)));
     }
@@ -304,6 +316,24 @@ function renderMessage(m, readAt) {
     return bubble;
   }
 
+  // Send modes: what kind it is, and what it is a reply to.
+  const openQuestion = m.kind === 'question' && !m.answeredAt;
+  if (m.kind === 'question') {
+    bubble.classList.add('msg--question');
+    if (m.answeredAt) bubble.classList.add('msg--answered');
+    bubble.append(
+      el('div', 'msg__kind', !m.answeredAt ? '❓ Important question' : m.answerId ? '✓ Answered' : '✓ Closed')
+    );
+  }
+  const task = m.kind === 'task' && m.payload && m.payload.task;
+  if (task) {
+    bubble.classList.add('msg--task');
+    bubble.append(el('div', 'msg__kind', taskWords(task, mine)));
+  }
+  if (replyTo && replyTo.id === m.id) bubble.classList.add('msg--replying');
+  const quote = m.payload && m.payload.replyTo;
+  if (quote) bubble.append(renderQuote(quote));
+
   const files = Files.attachmentsOf(m);
   if (files.length > 0) {
     bubble.classList.add('msg--files');
@@ -323,14 +353,65 @@ function renderMessage(m, readAt) {
     const cards = renderJobCards(m.body);
     if (cards) bubble.append(cards);
   }
+  // An open question says what to do about it, right on the bubble: theirs
+  // gets Answer, mine gets Close (Dion: "it just changes the question to a
+  // tick and its done").
+  if (openQuestion && !mine) {
+    const answer = el('button', 'msg__answer', '↩ Answer');
+    answer.type = 'button';
+    answer.addEventListener('click', () => startReply(m));
+    bubble.append(answer);
+    // "click that bubble and respond" - the whole bubble answers it too.
+    bubble.classList.add('msg--clickable');
+    bubble.addEventListener('click', (event) => {
+      if (event.target.closest('a, button, textarea')) return;
+      startReply(m);
+    });
+  } else if (openQuestion && mine) {
+    const close = el('button', 'msg__answer', '✓ Close');
+    close.type = 'button';
+    close.title = 'Mark it done — no answer needed in chat';
+    close.addEventListener('click', () => closeQuestion(m.id));
+    bubble.append(close);
+  }
   bubble.append(time);
 
-  if (mine) bubble.append(confirmDeleteId === m.id ? renderDeleteQuestion(m) : renderActions(m));
+  if (mine && confirmDeleteId === m.id) bubble.append(renderDeleteQuestion(m));
+  else bubble.append(renderActions(m, mine));
   return bubble;
 }
 
-function renderActions(m) {
+function renderQuote(quote) {
+  const q = el('button', 'msg__quote');
+  q.type = 'button';
+  q.title = 'Show the message this replies to';
+  q.append(
+    el('span', 'msg__quote-who', `${quote.kind === 'question' ? '❓ ' : ''}${quote.senderName || ''}`),
+    el('span', 'msg__quote-text', quote.text || 'Message deleted')
+  );
+  q.addEventListener('click', () => jumpTo({ id: quote.id }));
+  return q;
+}
+
+// "Task for JD - due Thu 8 Oct, 2:00 pm - A1234 - Admin"
+function taskWords(task, mine) {
+  const due = [TaskParse.dayWords(task.dueDate), TaskParse.timeWords(task.dueTime)].filter(Boolean).join(', ');
+  const parts = [`📋 Task for ${mine ? task.assigneeName || 'them' : 'you'}`];
+  if (due) parts.push(`due ${due}`);
+  if (task.job) parts.push(task.job);
+  if (task.label && task.label !== 'Task') parts.push(task.label);
+  return parts.join(' · ');
+}
+
+function renderActions(m, mine) {
   const bar = el('div', 'msg__actions');
+  const reply = el('button', 'msg__action', '↩');
+  reply.type = 'button';
+  reply.title = 'Reply to this message';
+  reply.setAttribute('aria-label', 'Reply');
+  reply.addEventListener('click', () => startReply(m));
+  bar.append(reply);
+  if (!mine) return bar;
   const edit = el('button', 'msg__action', '✎');
   edit.type = 'button';
   edit.title = 'Edit';
@@ -667,11 +748,15 @@ function renderMessages() {
   // Edits and deletes change a message without changing the count, and the
   // edit box / delete question are drawn in the thread too.
   const changes = msgs
-    .map((m) => (m.editedAt || m.deletedAt ? `${m.id}${m.editedAt}${m.deletedAt}` : ''))
+    .map((m) =>
+      m.editedAt || m.deletedAt || m.answeredAt ? `${m.id}${m.editedAt}${m.deletedAt}${m.answeredAt}` : ''
+    )
     .join('');
   const key = `${activeKey(state.active)}|${state.activeLoading}|${msgs.length}|${
     msgs.length ? msgs[msgs.length - 1].id : ''
-  }|${readAt || ''}|${changes}|${editingId || ''}|${confirmDeleteId || ''}|${state.highlightId || ''}`;
+  }|${readAt || ''}|${changes}|${editingId || ''}|${confirmDeleteId || ''}|${state.highlightId || ''}|${
+    replyTo ? replyTo.id : ''
+  }`;
   if (key === drawnThreadKey) return;
 
   const switched = key.split('|')[0] !== drawnThreadKey.split('|')[0];
@@ -718,6 +803,8 @@ function renderMessages() {
       ? messagesEl.querySelector(`[data-id="${CSS.escape(state.highlightId)}"]`)
       : null;
   const stick = !target && (switched || nearBottom) && !editingId;
+  pinnedBottom = stick;
+  jumpedToTarget = Boolean(target);
   if (target) {
     flashedId = state.highlightId;
     target.scrollIntoView({ block: 'center' });
@@ -776,12 +863,22 @@ function renderNotice() {
   }
 }
 
+// Set by renderMessages when it pinned the thread to the bottom, or scrolled
+// to a search result instead — render() re-pins after the bars below the
+// thread (composer, reply, task fields) have changed its height.
+let pinnedBottom = false;
+let jumpedToTarget = false;
+
 function render() {
   if (!state) return;
+  const atBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
+  pinnedBottom = false;
+  jumpedToTarget = false;
   meEl.textContent = state.me ? `Signed in as ${state.me.name}` : '';
   renderNotice();
   renderPeople();
   renderHeader();
+  renderQuestions();
   renderMessages();
 
   composerEl.hidden = !state.active || state.status !== 'ok';
@@ -790,6 +887,297 @@ function render() {
   sendErrorEl.textContent = note;
   sendErrorEl.classList.toggle('send-error--progress', Boolean(note) && note === state.sending);
   renderPending();
+  renderComposerMode();
+  if ((pinnedBottom || atBottom) && !jumpedToTarget && !editingId) {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+}
+
+// ── Important questions waiting (Dion 2026-10-07) ─────────────────────────
+// A strip under the header: how many are waiting on you and on them in this
+// conversation. Click it for the list; pick one to answer it (yours: close it).
+
+let questionsOpen = false;
+let drawnQuestionsKey = '';
+
+function questionsFor(conversationId) {
+  const meId = state && state.me ? state.me.identityId : null;
+  return Questions.split(Questions.inConversation(state.openQuestions || [], conversationId), meId);
+}
+
+function ageWords(iso) {
+  const ms = Date.now() - Date.parse(iso);
+  return Number.isFinite(ms) && ms >= 60 * 1000 ? `${window.acomsChatGaps.spanWords(ms)} ago` : 'just now';
+}
+
+function renderQuestions() {
+  const convId = state.active && state.active.conversationId;
+  const { forMe, byMe } = convId ? questionsFor(convId) : { forMe: [], byMe: [] };
+  const key = `${convId}|${questionsOpen}|${forMe.map((q) => q.id)}|${byMe.map((q) => q.id)}|${
+    replyTo ? replyTo.id : ''
+  }`;
+  if (key === drawnQuestionsKey) return;
+  drawnQuestionsKey = key;
+
+  questionsEl.replaceChildren();
+  questionsEl.hidden = forMe.length + byMe.length === 0;
+  if (questionsEl.hidden) {
+    questionsOpen = false;
+    return;
+  }
+  const person = activePerson();
+  const name = person ? person.name.split(' ')[0] : 'them';
+
+  const bar = el('button', `questions__bar${forMe.length > 0 ? ' questions__bar--mine' : ''}`);
+  bar.type = 'button';
+  const parts = [];
+  if (forMe.length > 0) parts.push(`${forMe.length} waiting on you`);
+  if (byMe.length > 0) parts.push(`${byMe.length} waiting on ${name}`);
+  bar.append(
+    el('span', null, `❓ Important questions: ${parts.join(' · ')}`),
+    el('span', 'questions__chev', questionsOpen ? '▴' : '▾')
+  );
+  bar.addEventListener('click', () => {
+    questionsOpen = !questionsOpen;
+    render();
+  });
+  questionsEl.append(bar);
+  if (!questionsOpen) return;
+
+  const list = el('div', 'questions__list');
+  const section = (title, items, mineSide) => {
+    if (items.length === 0) return;
+    list.append(el('div', 'questions__head', title));
+    for (const q of items) {
+      const row = el('div', `questions__item${replyTo && replyTo.id === q.id ? ' questions__item--on' : ''}`);
+      const text = el('button', 'questions__text');
+      text.type = 'button';
+      text.title = 'Show it in the conversation';
+      text.append(el('span', 'questions__body', q.body), el('span', 'questions__age', ageWords(q.createdAt)));
+      text.addEventListener('click', () => jumpTo(q));
+      const act = el('button', 'questions__act', mineSide ? '✓ Close' : '↩ Answer');
+      act.type = 'button';
+      act.addEventListener('click', () => (mineSide ? closeQuestion(q.id) : startReply(q)));
+      row.append(text, act);
+      list.append(row);
+    }
+  };
+  section('Waiting on you', forMe, false);
+  section(`Waiting on ${name}`, byMe, true);
+  questionsEl.append(list);
+}
+
+// Scroll to a message and flash it; one not loaded yet opens the thread at it.
+function jumpTo(target) {
+  const node = messagesEl.querySelector(`[data-id="${CSS.escape(target.id)}"]`);
+  if (node) {
+    node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    node.classList.remove('msg--flash');
+    void node.offsetWidth; // restart the animation
+    node.classList.add('msg--flash');
+  } else if (target.createdAt && state.active && state.active.conversationId) {
+    flashedId = null;
+    window.acomsChat.openAt(state.active.conversationId, { id: target.id, createdAt: target.createdAt });
+  }
+}
+
+async function closeQuestion(id) {
+  const result = await window.acomsChat.closeQuestion(id);
+  if (result && !result.ok) showLocalError(result.error || 'Could not close it');
+}
+
+// ── Send modes (Dion 2026-10-07) ──────────────────────────────────────────
+// "no tab is just send, one tab is send important question needs answer,
+// 2 tabs is a new task for that person in the task manager". Tab cycles,
+// Shift+Tab goes back, Esc returns to a normal message; after a send it is
+// always back to normal. Task mode reads the due date, time, job and category
+// out of what's typed (chat-task-parse.js) into fields the person can see and
+// change; the due date is required ("force us to give an answer").
+
+const MODES = ['text', 'question', 'task'];
+let mode = 'text';
+let replyTo = null; // the message being replied to / answered
+const emptyTask = () => ({ dueDate: '', dueTime: '', label: 'Task', job: '' });
+let taskFields = emptyTask();
+let taskTouched = {}; // fields set by hand — no longer filled from the text
+let drawnModeKey = '';
+
+function setMode(next) {
+  mode = next;
+  if (mode === 'task') {
+    window.acomsChat.taskLabels();
+    refillTask();
+  }
+  drawnModeKey = '';
+  render();
+  inputEl.focus();
+}
+
+function resetComposer() {
+  mode = 'text';
+  replyTo = null;
+  taskFields = emptyTask();
+  taskTouched = {};
+  drawnModeKey = '';
+  render();
+}
+
+function startReply(m) {
+  replyTo = {
+    id: m.id,
+    createdAt: m.createdAt,
+    senderName: m.senderName,
+    body: m.body,
+    answering: m.kind === 'question' && !m.answeredAt && !(state.me && m.senderId === state.me.identityId)
+  };
+  // An answer is an ordinary message.
+  if (replyTo.answering) mode = 'text';
+  drawnModeKey = '';
+  render();
+  inputEl.focus();
+}
+
+// Fill the task fields from the text, except the ones set by hand.
+function refillTask() {
+  const found = TaskParse.parseTask(inputEl.value, new Date(), state.taskLabels || []);
+  if (!taskTouched.dueDate) taskFields.dueDate = found.dueDate || '';
+  if (!taskTouched.dueTime) taskFields.dueTime = found.dueTime || '';
+  if (!taskTouched.label) taskFields.label = found.label || 'Task';
+  if (!taskTouched.job) taskFields.job = found.job || '';
+  syncTaskInputs();
+}
+
+function syncTaskInputs() {
+  const set = (cls, value) => {
+    const input = taskPanelEl.querySelector(cls);
+    if (input && input !== document.activeElement && input.value !== value) input.value = value;
+  };
+  set('.taskpanel__date', taskFields.dueDate);
+  set('.taskpanel__time', taskFields.dueTime);
+  set('.taskpanel__job', taskFields.job);
+  const label = taskPanelEl.querySelector('.taskpanel__label');
+  if (label && label !== document.activeElement) {
+    if (![...label.options].some((o) => o.value === taskFields.label)) {
+      label.append(new Option(taskFields.label, taskFields.label));
+    }
+    label.value = taskFields.label;
+  }
+  const read = taskPanelEl.querySelector('.taskpanel__read');
+  if (read) {
+    read.textContent = taskFields.dueDate
+      ? [TaskParse.dayWords(taskFields.dueDate), TaskParse.timeWords(taskFields.dueTime)].filter(Boolean).join(', ')
+      : 'pick a date';
+    read.classList.toggle('taskpanel__read--missing', !taskFields.dueDate);
+  }
+}
+
+function field(labelText, input) {
+  const wrap = el('label', 'taskpanel__field');
+  wrap.append(el('span', 'taskpanel__name', labelText), input);
+  return wrap;
+}
+
+function buildTaskPanel() {
+  taskPanelEl.replaceChildren();
+  const date = el('input', 'taskpanel__date');
+  date.type = 'date';
+  date.required = true;
+  const time = el('input', 'taskpanel__time');
+  time.type = 'time';
+  const label = el('select', 'taskpanel__label');
+  for (const l of [...new Set(['Task', ...(state.taskLabels || [])])]) label.append(new Option(l, l));
+  const job = el('input', 'taskpanel__job');
+  job.placeholder = 'A1234';
+  job.maxLength = 8;
+  job.spellcheck = false;
+
+  const watch = (input, key, read = () => input.value) =>
+    input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', () => {
+      taskFields[key] = read();
+      taskTouched[key] = true;
+      syncTaskInputs();
+    });
+  watch(date, 'dueDate');
+  watch(time, 'dueTime');
+  watch(label, 'label');
+  watch(job, 'job', () => job.value.trim().toUpperCase());
+
+  taskPanelEl.append(
+    field('Due', date),
+    el('span', 'taskpanel__read'),
+    field('Time', time),
+    field('Category', label),
+    field('Job', job)
+  );
+  syncTaskInputs();
+}
+
+function renderComposerMode() {
+  const person = activePerson();
+  const name = person ? person.name.split(' ')[0] : 'them';
+  const labelsKey = (state.taskLabels || []).join('|');
+  const key = `${mode}|${replyTo ? replyTo.id : ''}|${name}|${composerEl.hidden}|${labelsKey}`;
+  if (key === drawnModeKey) return;
+  drawnModeKey = key;
+
+  composerEl.classList.toggle('composer--question', mode === 'question');
+  composerEl.classList.toggle('composer--task', mode === 'task');
+  inputEl.placeholder =
+    mode === 'question'
+      ? 'Ask your important question — Enter to send'
+      : mode === 'task'
+        ? 'What needs doing? e.g. chase the A1234 PO by 2pm Thursday'
+        : replyTo && replyTo.answering
+          ? 'Write your answer — Enter to send'
+          : 'Write a message — Enter to send · Tab for an important question or a task';
+  sendEl.textContent = mode === 'question' ? 'Ask' : mode === 'task' ? 'Give task' : 'Send';
+
+  modeBarEl.replaceChildren();
+  modeBarEl.hidden = composerEl.hidden || mode === 'text';
+  modeBarEl.className = `modebar${mode === 'task' ? ' modebar--task' : ''}`;
+  if (!modeBarEl.hidden) {
+    modeBarEl.append(
+      el(
+        'span',
+        'modebar__what',
+        mode === 'question'
+          ? `❓ Important question — stays open until ${name} answers it`
+          : `📋 Task for ${name} — goes into their Task Manager`
+      ),
+      el('span', 'modebar__hint', 'Tab: next · Esc: normal message')
+    );
+  }
+
+  replyEl.replaceChildren();
+  replyEl.hidden = composerEl.hidden || !replyTo;
+  if (!replyEl.hidden) {
+    const what = el('button', 'reply__what');
+    what.type = 'button';
+    what.title = 'Show it in the conversation';
+    what.append(
+      el(
+        'span',
+        'reply__label',
+        replyTo.answering ? `↩ Answering ${replyTo.senderName}’s question` : `↩ Replying to ${replyTo.senderName}`
+      ),
+      el('span', 'reply__text', String(replyTo.body || '').replace(/\s+/g, ' ').trim())
+    );
+    what.addEventListener('click', () => jumpTo(replyTo));
+    const x = el('button', 'reply__x', '✕');
+    x.type = 'button';
+    x.title = 'Cancel the reply';
+    x.addEventListener('click', () => {
+      replyTo = null;
+      drawnModeKey = '';
+      render();
+      inputEl.focus();
+    });
+    replyEl.append(what, x);
+  }
+
+  taskPanelEl.hidden = composerEl.hidden || mode !== 'task';
+  if (taskPanelEl.hidden) taskPanelEl.replaceChildren();
+  else buildTaskPanel();
 }
 
 // ── Composer ───────────────────────────────────────────────────────────────
@@ -870,6 +1258,24 @@ function renderPending() {
 async function submit() {
   const text = inputEl.value.trim();
   if ((!text && pending.length === 0) || sendEl.disabled) return;
+  if (mode !== 'text' && !text) {
+    showLocalError(mode === 'task' ? 'Write what needs doing' : 'Write the question');
+    return;
+  }
+  if (mode === 'task') {
+    refillTask();
+    if (!taskFields.dueDate) {
+      showLocalError('Pick a due date for the task');
+      const date = taskPanelEl.querySelector('.taskpanel__date');
+      if (date) date.focus();
+      return;
+    }
+  }
+  const opts = {
+    kind: mode,
+    ...(replyTo ? { replyToId: replyTo.id } : {}),
+    ...(mode === 'task' ? { task: { ...taskFields } } : {})
+  };
   sendEl.disabled = true;
   attachEl.disabled = true;
   try {
@@ -880,11 +1286,12 @@ async function submit() {
         data: await p.file.arrayBuffer()
       }))
     );
-    const result = await window.acomsChat.send(text, files);
+    const result = await window.acomsChat.send(text, files, opts);
     // Only clear what was typed — and the files — once the server has it.
     if (result && result.ok) {
       inputEl.value = '';
       clearPending();
+      resetComposer();
       autoGrow();
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
@@ -971,10 +1378,19 @@ inputEl.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
     submit();
+  } else if (event.key === 'Tab' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+    // Tab: normal -> important question -> task -> normal. Shift+Tab goes back.
+    event.preventDefault();
+    const i = MODES.indexOf(mode);
+    setMode(MODES[(i + (event.shiftKey ? MODES.length - 1 : 1)) % MODES.length]);
+  } else if (event.key === 'Escape' && (mode !== 'text' || replyTo)) {
+    event.preventDefault();
+    resetComposer();
   }
 });
 
 inputEl.addEventListener('input', () => {
+  if (mode === 'task') refillTask();
   autoGrow();
   if (inputEl.value.trim()) window.acomsChat.typing();
 });

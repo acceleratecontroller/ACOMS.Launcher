@@ -54,6 +54,9 @@
   function previewText(message) {
     if (message && message.deletedAt) return 'Message deleted';
     const body = String((message && message.body) || '').trim();
+    // Send modes (2026-10-07): say what kind it is in the list and the pop-up.
+    if (body && message.kind === 'question') return `❓ ${body}`;
+    if (body && message.kind === 'task') return `📋 Task: ${body}`;
     return body || summary(message);
   }
 

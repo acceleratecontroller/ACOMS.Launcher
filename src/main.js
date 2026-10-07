@@ -677,7 +677,11 @@ ipcMain.on('chat:typing', () => chat.typing());
 ipcMain.handle('chat:search', (_event, q) => chat.search(typeof q === 'string' ? q : ''));
 ipcMain.handle('chat:job-cards', (_event, numbers) => chat.jobCards(numbers));
 ipcMain.handle('chat:select-person', (_event, id) => chat.selectPerson(id));
-ipcMain.handle('chat:send', (_event, text, files) => chat.send(text, cleanOutgoingFiles(files)));
+ipcMain.handle('chat:send', (_event, text, files, opts) =>
+  chat.send(text, cleanOutgoingFiles(files), opts && typeof opts === 'object' ? opts : {})
+);
+ipcMain.handle('chat:close-question', (_event, id) => chat.closeQuestion(id));
+ipcMain.handle('chat:task-labels', () => chat.loadTaskLabels());
 // Files in chat (chat-files.js). Every argument comes from a renderer, so it
 // is checked here rather than trusted.
 ipcMain.handle('chat:open-file', (_event, file) => runFileAction(() => chatFiles.open(attachmentArg(file))));
