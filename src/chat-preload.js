@@ -37,7 +37,13 @@ contextBridge.exposeInMainWorld('acomsChat', {
 
   // Resolves to { ok: boolean }; a failure's reason arrives as state.sendError.
   // files: [{ name, type, data: ArrayBuffer }] — uploaded by the main process.
-  send: (text, files) => ipcRenderer.invoke('chat:send', text, files),
+  // opts: { kind: 'text'|'question'|'task', replyToId, task: { dueDate, dueTime, label, job } }.
+  send: (text, files, opts) => ipcRenderer.invoke('chat:send', text, files, opts),
+
+  // Close my own important question. Resolves to { ok, error? }.
+  closeQuestion: (id) => ipcRenderer.invoke('chat:close-question', id),
+  // The Task Manager's categories (also arrive as state.taskLabels).
+  taskLabels: () => ipcRenderer.invoke('chat:task-labels'),
 
   // A file in a message ({ id, name }): open it with the computer's own app,
   // or save a copy. Resolve to { ok, error? }.

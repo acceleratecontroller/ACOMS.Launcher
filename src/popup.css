@@ -160,3 +160,8 @@ body {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text);
 }
+
+/* An important question waiting on an answer (chat, hourly). */
+.card--question {
+  --accent: #f59e0b;
+}

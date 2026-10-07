@@ -25,6 +25,7 @@ const { net } = require('electron');
 const popup = require('./popup');
 const chatFiles = require('./chat-files');
 const { jobLinkBaseFor } = require('./chat-links');
+const questions = require('./chat-questions');
 const {
   pollIntervalMs,
   decideMessageToasts,
@@ -70,6 +71,12 @@ let sendError = '';
 let sending = ''; // "Sending 2 files…" while an upload is under way
 // A search result opened: the message to scroll to and flash once.
 let highlightId = null;
+// Important questions still open in any of my conversations, both ways
+// (sync sends the whole list every poll), and the categories the Task
+// Manager uses, for task mode.
+let openQuestions = [];
+let taskLabels = [];
+let nagShown = {}; // question id -> hour last nagged for (chat-questions.js)
 
 let windowOpen = false;
 let windowFocused = false;
@@ -93,7 +100,9 @@ function snapshot() {
     sendError,
     sending,
     highlightId,
-    jobLinkBase
+    jobLinkBase,
+    openQuestions,
+    taskLabels
   };
 }
 
@@ -195,6 +204,39 @@ function toast(text) {
   });
 }
 
+// Important questions asked of me nag every hour until answered (Dion,
+// 2026-10-07: "persistent every hour"). One card for all of them, its own
+// kind so clicking into chat doesn't clear it — it goes when they're answered.
+function nagAboutQuestions() {
+  if (!me) return;
+  const decision = questions.decideNag({
+    openQuestions,
+    meId: me.identityId,
+    nowMs: Date.now(),
+    shown: nagShown
+  });
+  nagShown = decision.shown;
+  if (decision.clear) {
+    popup.dismissKey('chat-questions');
+    return;
+  }
+  if (!decision.show) return;
+  const { conversationId, message } = decision.show;
+  popup.show({
+    kind: 'question',
+    label: 'ACOMS Chat',
+    title: decision.show.title,
+    body: decision.show.body,
+    key: 'chat-questions',
+    badge: '?',
+    sticky: true,
+    onClick: () => {
+      if (openChatWindow) openChatWindow(conversationId);
+      selectConversation(conversationId, { at: message });
+    }
+  });
+}
+
 function rememberHandled(ids) {
   for (const id of ids) handledIds.add(id);
   // Sets keep insertion order, so the oldest ids are the first ones out.
@@ -234,6 +276,11 @@ async function poll() {
     people = Array.isArray(data.people) ? data.people : [];
     conversations = Array.isArray(data.conversations) ? data.conversations : [];
     if (typeof data.cursor === 'string') cursor = data.cursor;
+
+    if (Array.isArray(data.openQuestions)) {
+      openQuestions = data.openQuestions;
+      nagAboutQuestions();
+    }
 
     const incoming = Array.isArray(data.incoming) ? data.incoming : [];
     const activeId = active && active.conversationId ? active.conversationId : null;
@@ -347,10 +394,15 @@ function selectPerson(identityId) {
 // `files`: [{ name, type, data: ArrayBuffer }] from the window — dropped,
 // pasted or picked. Each is uploaded first; the message then names them.
 // Nothing is cleared from the composer unless the whole message went.
-async function send(text, files) {
+// `opts` — the send mode (Dion 2026-10-07): { kind: 'text'|'question'|'task',
+// replyToId, task: { dueDate, dueTime, label, job } }.
+async function send(text, files, opts = {}) {
   const body = String(text || '').trim();
   const list = Array.isArray(files) ? files : [];
   if ((!body && list.length === 0) || !active) return { ok: false };
+  const kind = opts && (opts.kind === 'question' || opts.kind === 'task') ? opts.kind : 'text';
+  const replyToId = opts && typeof opts.replyToId === 'string' ? opts.replyToId : null;
+  const task = kind === 'task' && opts.task && typeof opts.task === 'object' ? cleanTask(opts.task) : null;
 
   const target = active;
   sendError = '';
@@ -374,7 +426,10 @@ async function send(text, files) {
         ? { conversationId: target.conversationId }
         : { toIdentityId: target.toIdentityId }),
       body,
-      ...(attachmentIds.length > 0 ? { attachmentIds } : {})
+      ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
+      ...(kind !== 'text' ? { kind } : {}),
+      ...(replyToId ? { replyToId } : {}),
+      ...(task ? { task } : {})
     }
   });
   sending = '';
@@ -387,6 +442,11 @@ async function send(text, files) {
 
   const message = res.data;
   rememberHandled([message.id]);
+  // My reply to their open question answers it; don't wait a poll to say so.
+  if (replyToId) {
+    openQuestions = openQuestions.filter((q) => !(q.id === replyToId && me && q.senderId !== me.identityId));
+  }
+  if (kind === 'question') openQuestions = [...openQuestions, message];
   if (active === target) {
     // A first message has just created the conversation — it has an id now.
     active = { conversationId: message.conversationId };
@@ -395,6 +455,47 @@ async function send(text, files) {
   emit();
   pollNow(); // pick the new conversation / ordering up straight away
   return { ok: true };
+}
+
+// Only the fields the server takes, in the shapes it takes them.
+function cleanTask(t) {
+  const out = {};
+  if (typeof t.dueDate === 'string') out.dueDate = t.dueDate;
+  if (typeof t.dueTime === 'string' && t.dueTime) out.dueTime = t.dueTime;
+  if (typeof t.label === 'string' && t.label.trim()) out.label = t.label.trim();
+  if (typeof t.job === 'string' && t.job.trim()) out.job = t.job.trim();
+  return out;
+}
+
+// ── Questions and tasks ─────────────────────────────────────────────────────
+
+// Close my own question — no reason asked (Dion: "it just changes the
+// question to a tick and its done").
+async function closeQuestion(id) {
+  if (typeof id !== 'string') return { ok: false };
+  const res = await request(`/api/chat/messages/${encodeURIComponent(id)}/close`, {
+    method: 'POST',
+    body: {}
+  });
+  if (!res.ok) return { ok: false, error: res.message || 'Could not close it' };
+  openQuestions = openQuestions.filter((q) => q.id !== id);
+  applyChanged(res.data);
+  return { ok: true };
+}
+
+// The Task Manager's categories, for task mode. Asked for when task mode is
+// first used, then at most every 10 minutes.
+const LABELS_MS = 10 * 60 * 1000;
+let labelsAt = 0;
+async function loadTaskLabels() {
+  if (Date.now() - labelsAt < LABELS_MS && taskLabels.length > 0) return taskLabels;
+  const res = await request('/api/chat/task-options');
+  if (res.ok && Array.isArray(res.data.labels)) {
+    taskLabels = res.data.labels.filter((l) => typeof l === 'string');
+    labelsAt = Date.now();
+    emit();
+  }
+  return taskLabels;
 }
 
 // ── Edit / delete your own message ─────────────────────────────────────────
@@ -534,6 +635,8 @@ module.exports = {
   send,
   editMessage,
   deleteMessage,
+  closeQuestion,
+  loadTaskLabels,
   typing,
   search,
   jobCards,
