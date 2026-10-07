@@ -16,6 +16,7 @@
 // can move onto the same path by widening CAN_SELF_INSTALL.
 
 const { app, Notification, shell, powerMonitor } = require('electron');
+const popup = require('./popup');
 
 // electron-updater is a production dependency, but requiring it must never be
 // what stops the launcher opening.
@@ -167,6 +168,29 @@ function reportManual(outcome) {
   // progress, the ready prompt, or failed()'s own notification covers it.
 }
 
+// The update is downloaded: a pop-up card that stays until it is clicked, and
+// clicking it restarts into the new version. Dion, 2026-10-07: "if the app
+// needs updating i want a persistent notification for that too please and
+// when its clicked it just does it ... just to keep people on the latest
+// version otherwise i have to keep telling everyone". This used to be an OS
+// notification, which most PCs here never show (see popup.js) — so nobody saw
+// it. Dismissing the card only puts it off: every update check (30 min, and
+// on wake) raises it again while the update is still waiting.
+function announceReady() {
+  if (state.status !== 'ready') return;
+  const v = state.newVersion;
+  popup.show({
+    kind: 'update',
+    label: 'ACOMS Launcher',
+    title: v ? `Update ready — version ${v}` : 'Update ready',
+    body: 'Click to restart and install it now.',
+    key: 'launcher-update',
+    badge: '↑',
+    sticky: true,
+    onClick: () => quitAndInstall()
+  });
+}
+
 function notify(title, body, onClick) {
   if (!Notification.isSupported()) return;
   const n = new Notification({ title, body });
@@ -238,11 +262,7 @@ function wireEvents() {
     // Deliberately NOT restarting on its own: the launcher owns the windows
     // someone is working in, and yanking those away mid-job is worse than
     // running yesterday's build for another hour.
-    notify(
-      'ACOMS Launcher update ready',
-      `Version ${v || 'newer'} applies next time you restart. Click to restart now.`,
-      () => quitAndInstall()
-    );
+    announceReady();
   });
 
   autoUpdater.on('error', (err) => {
@@ -264,6 +284,13 @@ function check({ manual = false } = {}) {
     if (manual) {
       notify('ACOMS Launcher', 'This is a development build — updates are disabled.');
     }
+    return;
+  }
+
+  // Already downloaded and waiting on a restart: nothing to ask the feed,
+  // just put the card back in front of them.
+  if (state.status === 'ready') {
+    announceReady();
     return;
   }
 
