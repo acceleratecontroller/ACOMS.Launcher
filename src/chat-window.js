@@ -351,6 +351,12 @@ function renderMessage(m, readAt) {
     bubble.classList.add('msg--task');
     bubble.append(el('div', 'msg__kind', taskWords(task, mine)));
   }
+  // A task given in chat was completed or reopened: the server posts this
+  // card back as a reply to the task (Dion 2026-10-07, close the loop).
+  if (m.kind === 'taskStatus') {
+    const reopened = m.payload && m.payload.taskStatus && m.payload.taskStatus.status === 'reopened';
+    bubble.classList.add(reopened ? 'msg--task-reopened' : 'msg--task-done');
+  }
   if (replyTo && replyTo.id === m.id) bubble.classList.add('msg--replying');
   const quote = m.payload && m.payload.replyTo;
   if (quote) bubble.append(renderQuote(quote));

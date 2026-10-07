@@ -943,11 +943,21 @@ a.job:hover {
 .msg--question {
   box-shadow: inset 0 0 0 2px var(--question);
 }
-.msg--answered {
-  box-shadow: inset 0 0 0 2px var(--open);
+/* 2px of --open was too subtle to see, worst on my blue bubbles (Dion
+   2026-10-07): a thicker, brighter green ring plus a soft green glow. */
+.msg--answered,
+.msg--task-done {
+  box-shadow:
+    inset 0 0 0 3px #4ade80,
+    0 0 0 1px rgba(74, 222, 128, 0.45),
+    0 0 14px rgba(74, 222, 128, 0.4);
 }
 .msg--task {
   box-shadow: inset 0 0 0 2px var(--task);
+}
+/* A task given in chat that was reopened after being done. */
+.msg--task-reopened {
+  box-shadow: inset 0 0 0 3px var(--question);
 }
 .msg--clickable {
   cursor: pointer;
