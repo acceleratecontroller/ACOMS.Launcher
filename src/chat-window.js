@@ -629,6 +629,37 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
+// ── Quiet spells ───────────────────────────────────────────────────────────
+
+function gapLine(text, extra) {
+  const line = el('div', extra ? `gap ${extra}` : 'gap');
+  line.append(el('span', 'gap__label', text));
+  return line;
+}
+
+// "last msg 2 hours ago" under the newest message. It ages while the window
+// sits open, so it is kept up to date on a timer rather than by a redraw.
+function updateSinceLast() {
+  const msgs = state.activeMessages || [];
+  const old = messagesEl.querySelector('.gap--last');
+  const last = state.active && !state.activeLoading ? msgs[msgs.length - 1] : null;
+  const text = last ? window.acomsChatGaps.sinceLast(last.createdAt, Date.now()) : null;
+  if (!text) {
+    if (old) old.remove();
+    return;
+  }
+  if (old && old === messagesEl.lastElementChild) {
+    old.querySelector('.gap__label').textContent = text;
+    return;
+  }
+  if (old) old.remove();
+  const nearBottom =
+    messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
+  messagesEl.append(gapLine(text, 'gap--last'));
+  if (nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+setInterval(updateSinceLast, 30 * 1000);
+
 function renderMessages() {
   const msgs = state.activeMessages;
   // Their read time is part of the key: a tick appearing IS a change to draw.
@@ -663,15 +694,23 @@ function renderMessages() {
     return;
   }
 
+  // A new day gets its heading; a quiet spell of 15+ minutes gets a faint line
+  // with "2 hours later" in the middle (both on one line when they coincide).
   let lastDay = '';
+  let prev = null;
   for (const m of msgs) {
     const day = dayOf(m.createdAt);
-    if (day !== lastDay) {
+    const gap = prev ? window.acomsChatGaps.gapBetween(prev.createdAt, m.createdAt) : null;
+    if (gap) {
+      messagesEl.append(gapLine(day !== lastDay ? `${day} · ${gap}` : gap));
+    } else if (day !== lastDay) {
       messagesEl.append(el('div', 'day', day));
-      lastDay = day;
     }
+    lastDay = day;
+    prev = m;
     messagesEl.append(renderMessage(m, readAt));
   }
+  updateSinceLast();
 
   // A search result: scroll to it and flash it, once.
   const target =
