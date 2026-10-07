@@ -33,16 +33,22 @@
       <nav id="people" class="people" aria-label="People">
         <!-- Rendered by chat-window.js -->
       </nav>
+      <!-- Rooms (Dion 2026-10-07): each a wormhole in this corner, not a row. -->
+      <div id="rooms" class="rooms" hidden></div>
     </aside>
 
     <main class="thread">
       <header id="thread-header" class="thread__header"></header>
+      <!-- A room's purpose, pinned under its header. -->
+      <div id="room-purpose" class="room-purpose" hidden></div>
       <!-- Important questions still waiting, both ways (Dion 2026-10-07). -->
       <div id="questions" class="questions" hidden></div>
       <div id="notice" class="notice" hidden></div>
       <div id="messages" class="messages" aria-live="polite"></div>
       <div id="pending" class="pending" hidden></div>
       <!-- Send modes: Tab cycles normal / important question / task. -->
+      <!-- @name suggestions while typing in a room. -->
+      <div id="mentions" class="mentions" role="listbox" hidden></div>
       <div id="modebar" class="modebar" hidden></div>
       <div id="reply" class="reply" hidden></div>
       <div id="taskpanel" class="taskpanel" hidden></div>
@@ -64,12 +70,17 @@
       <div id="drop" class="drop" hidden><div class="drop__box">Drop to attach</div></div>
     </main>
 
+    <!-- The room admin's right-click menu on a wormhole, and the new / manage screens. -->
+    <div id="room-menu" class="room-menu" role="menu" hidden></div>
+    <div id="room-dialog" class="room-dialog" hidden></div>
+
 
     <script src="chat-links.js"></script>
     <script src="chat-seen.js"></script>
     <script src="chat-gaps.js"></script>
     <script src="chat-questions.js"></script>
     <script src="chat-presence.js"></script>
+    <script src="chat-rooms.js"></script>
     <script src="chat-task-parse.js"></script>
     <script src="chat-files-rules.js"></script>
     <script src="chat-window.js"></script>

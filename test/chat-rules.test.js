@@ -169,3 +169,65 @@ test('merging drops duplicates and keeps oldest first', () => {
   );
   assert.deepStrictEqual(merged.map((m) => m.id), ['a', 'b', 'c']);
 });
+
+// ── Rooms (Dion 2026-10-07) ────────────────────────────────────────────────
+{
+  const { decideMessageToasts: decide, unreadWeight, roomState, firstPollToastText: firstToast } = require('../src/chat-rules');
+  const voidRoom = (over = {}) => ({
+    id: 'r1',
+    kind: 'room',
+    room: { name: 'The Void', notifyMode: 'count' },
+    muted: false,
+    unread: 0,
+    mentions: 0,
+    ...over
+  });
+  const dm = { id: 'c1', kind: 'dm', room: null, unread: 2, with: [{ name: 'JD' }] };
+  const msg = (over) => ({ id: 'm', conversationId: 'r1', senderName: 'JD', body: 'hi', mentions: [], ...over });
+
+  test('a quiet room pops up only a message that @mentions me', () => {
+    const { toast } = decide({
+      incoming: [msg({ id: 'a' }), msg({ id: 'b', mentions: ['dion'] }), msg({ id: 'c', mentions: ['warrick'] })],
+      conversations: [voidRoom()],
+      meId: 'dion'
+    });
+    assert.deepStrictEqual(toast.map((m) => m.id), ['b']);
+  });
+
+  test('a muted room pops up nothing, not even an @mention', () => {
+    const { toast, handled } = decide({
+      incoming: [msg({ id: 'b', mentions: ['dion'] })],
+      conversations: [voidRoom({ muted: true })],
+      meId: 'dion'
+    });
+    assert.deepStrictEqual(toast, []);
+    assert.deepStrictEqual(handled, ['b']);
+  });
+
+  test('an "every" room pops up like a DM, and a DM is unchanged', () => {
+    const { toast } = decide({
+      incoming: [msg({ id: 'a' }), msg({ id: 'd', conversationId: 'c1' })],
+      conversations: [voidRoom({ room: { name: 'Crew', notifyMode: 'every' } }), dm],
+      meId: 'dion'
+    });
+    assert.deepStrictEqual(toast.map((m) => m.id), ['a', 'd']);
+  });
+
+  test('a quiet room adds only its @mentions to the tray; a muted one nothing', () => {
+    assert.strictEqual(unreadWeight(voidRoom({ unread: 5, mentions: 1 })), 1);
+    assert.strictEqual(unreadWeight(voidRoom({ unread: 5, mentions: 1, muted: true })), 0);
+    assert.strictEqual(unreadWeight(dm), 2);
+  });
+
+  test('the wormhole: red wins over blue, grey when nothing', () => {
+    assert.strictEqual(roomState(voidRoom({ unread: 5, mentions: 1 })), 'mentioned');
+    assert.strictEqual(roomState(voidRoom({ unread: 5 })), 'unread');
+    assert.strictEqual(roomState(voidRoom()), 'quiet');
+  });
+
+  test('the first-poll summary ignores a quiet room\'s chatter but counts a mention', () => {
+    assert.strictEqual(firstToast([voidRoom({ unread: 9 })]), null);
+    const t = firstToast([voidRoom({ unread: 9, mentions: 1 })]);
+    assert.match(t.body, /1 unread message from The Void/);
+  });
+}

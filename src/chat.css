@@ -1273,3 +1273,342 @@ a.job:hover {
   font-size: 11.5px;
   font-weight: 400;
 }
+
+/* ── Rooms (Dion 2026-10-07) ──────────────────────────────────────────────
+   A room is a wormhole in the bottom-left corner, not a row in the list: a
+   soft, edgeless, slowly turning tunnel that only says what kind of news is
+   in it. Grey nothing, blue unread, red an @mention of you (red wins until
+   read). The web /chat page draws the same. */
+.rooms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 12px;
+}
+.rooms[hidden] {
+  display: none;
+}
+.room-door {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 20px;
+  cursor: pointer;
+}
+.room-door:hover,
+.room-door--active {
+  background: rgba(255, 255, 255, 0.04);
+}
+.room-door:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.room-door--new {
+  border: 1px dashed var(--border);
+}
+.wormhole--quiet {
+  color: #4a5867;
+}
+.wormhole--unread {
+  color: var(--accent);
+  filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.45));
+}
+.wormhole--mentioned {
+  color: var(--danger);
+  filter: drop-shadow(0 0 6px rgba(248, 113, 113, 0.5));
+}
+
+/* Inside a room. */
+.thread__room {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.thread__room .thread__status {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.thread__tool {
+  flex: none;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.thread__tool:hover {
+  color: var(--text);
+}
+.thread__tool--on {
+  color: var(--text);
+  background: var(--card);
+}
+.room-purpose {
+  padding: 8px 18px;
+  background: #161e27;
+  border-bottom: 1px solid var(--border);
+  color: #c9d4df;
+  font-size: 13px;
+}
+.room-purpose[hidden] {
+  display: none;
+}
+.room-purpose b {
+  color: var(--text);
+  font-weight: 600;
+}
+.msg__sender {
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* @name suggestions, just above the composer. */
+.mentions {
+  display: flex;
+  flex-direction: column;
+  margin: 0 18px 4px;
+  padding: 4px;
+  max-width: 280px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+}
+.mentions[hidden] {
+  display: none;
+}
+.mentions__item {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mentions__item--on,
+.mentions__item:hover {
+  background: var(--card-hover);
+}
+
+/* The room admin's right-click menu. */
+.room-menu {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.room-menu[hidden] {
+  display: none;
+}
+.room-menu__item {
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.room-menu__item:hover,
+.room-menu__item:focus-visible {
+  background: var(--card-hover);
+  outline: none;
+}
+
+/* New room / manage room. */
+.room-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.55);
+}
+.room-dialog[hidden] {
+  display: none;
+}
+.room-dialog__box {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 480px;
+  max-height: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  overflow: hidden;
+}
+.room-dialog__head {
+  padding: 16px 20px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.room-dialog__title {
+  font-size: 16px;
+  font-weight: 600;
+}
+.room-dialog__sub,
+.room-dialog__note {
+  color: var(--muted);
+  font-size: 12px;
+}
+.room-dialog__note {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  line-height: 1.5;
+}
+.room-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 20px;
+  overflow-y: auto;
+}
+.room-dialog__error {
+  margin: 0 20px 8px;
+  color: var(--danger);
+  font-size: 12px;
+}
+.room-dialog__error[hidden] {
+  display: none;
+}
+.room-dialog__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px 14px;
+  border-top: 1px solid var(--border);
+}
+.room-dialog__spacer {
+  flex: 1;
+}
+.room-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.room-field__label {
+  color: #c9d4df;
+  font-size: 12px;
+  font-weight: 600;
+}
+.room-input {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.room-icons {
+  display: flex;
+  gap: 6px;
+}
+.room-icons__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+  cursor: pointer;
+}
+.room-icons__item--on {
+  border-color: var(--accent);
+}
+.room-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.room-people {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.room-members {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.room-members__row,
+.room-members__add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.room-members__add .room-input {
+  flex: 1;
+}
+.room-members__who {
+  flex: 1;
+  font-weight: 600;
+}
+.room-members__note {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.room-btn {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.room-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.room-btn--primary {
+  border: 0;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.room-btn--danger {
+  border-color: #5b2a2a;
+  color: var(--danger);
+}
+.room-btn--small {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}

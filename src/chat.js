@@ -29,6 +29,7 @@ const questions = require('./chat-questions');
 const {
   pollIntervalMs,
   decideMessageToasts,
+  unreadWeight,
   messageToastText,
   firstPollToastText,
   mergeMessages
@@ -128,8 +129,9 @@ function onChanged(fn) {
   };
 }
 
+// A quiet room counts only its @mentions here; its wormhole shows the rest.
 function unreadTotal() {
-  return conversations.reduce((n, c) => n + (c.unread || 0), 0);
+  return conversations.reduce((n, c) => n + unreadWeight(c), 0);
 }
 
 // ── Requests ───────────────────────────────────────────────────────────────
@@ -258,7 +260,12 @@ async function poll() {
   if (polling) return;
   polling = true;
   try {
-    const res = await request(syncPath, { method: 'POST', body: { since: cursor, idleSeconds: idleSeconds(), appVersion: app.getVersion() } });
+    const res = await request(syncPath, {
+      method: 'POST',
+      // rooms: this Launcher knows rooms (2026-10-07). Without it the server
+      // leaves them out, so an older one can't toast every room message.
+      body: { since: cursor, idleSeconds: idleSeconds(), appVersion: app.getVersion(), rooms: true }
+    });
 
     if (!res.ok) {
       // A Controller without the chat routes answers 404 (or 405). That is "not
@@ -296,7 +303,9 @@ async function poll() {
         incoming,
         handledIds,
         activeConversationId: activeId,
-        windowFocused: windowOpen && windowFocused
+        windowFocused: windowOpen && windowFocused,
+        conversations,
+        meId: me && me.identityId
       });
       rememberHandled(decision.handled);
       toast(messageToastText(decision.toast));
@@ -562,6 +571,49 @@ function typing() {
   });
 }
 
+// ── Rooms (Dion 2026-10-07) ────────────────────────────────────────────────
+// Making and managing rooms is the room admin's (the server checks; the window
+// only offers it when sync says me.canManageRooms). Each resolves to
+// { ok, room?, error? } and polls straight after, so the corner updates.
+
+async function roomCall(path, method, body) {
+  const res = await request(path, { method, body });
+  pollNow();
+  if (!res.ok) return { ok: false, error: res.message || 'That didn’t work — try again' };
+  return { ok: true, room: res.data };
+}
+
+const roomPath = (id) => `/api/chat/rooms/${encodeURIComponent(String(id || ''))}`;
+
+function createRoom(input) {
+  return roomCall('/api/chat/rooms', 'POST', input);
+}
+async function getRoom(id) {
+  const res = await request(roomPath(id));
+  if (!res.ok) return { ok: false, error: res.message || 'Couldn’t load the room' };
+  return { ok: true, room: res.data };
+}
+function updateRoom(id, changes) {
+  return roomCall(roomPath(id), 'PATCH', changes);
+}
+function addRoomMember(id, identityId) {
+  return roomCall(`${roomPath(id)}/members`, 'POST', { identityId });
+}
+function removeRoomMember(id, identityId) {
+  return roomCall(`${roomPath(id)}/members/${encodeURIComponent(String(identityId || ''))}`, 'DELETE');
+}
+// Any member, for themselves only.
+async function muteRoom(id, muted) {
+  const conv = conversations.find((c) => c.id === id);
+  if (conv) {
+    conv.muted = Boolean(muted); // optimistic; the next poll is the truth
+    emit();
+  }
+  const res = await request(`${roomPath(id)}/mute`, { method: 'POST', body: { muted: Boolean(muted) } });
+  pollNow();
+  return res.ok ? { ok: true } : { ok: false, error: res.message || 'Couldn’t change mute' };
+}
+
 // ── Search ─────────────────────────────────────────────────────────────────
 
 async function search(q) {
@@ -656,5 +708,11 @@ module.exports = {
   typing,
   search,
   jobCards,
+  createRoom,
+  getRoom,
+  updateRoom,
+  addRoomMember,
+  removeRoomMember,
+  muteRoom,
   setWindowState
 };
