@@ -17,6 +17,7 @@ const {
 const chat = require('./chat');
 const chatFiles = require('./chat-files');
 const popup = require('./popup');
+const autostart = require('./autostart');
 const store = require('./store');
 
 // Thumbnails in chat load from acoms-file:// (chat-files.js); a scheme's
@@ -361,6 +362,21 @@ function refreshTrayMenu() {
     items.push({ label: u.message, enabled: false });
   } else {
     items.push({ label: 'Check for updates…', click: () => updater.check({ manual: true }) });
+  }
+
+  if (autostart.supported()) {
+    items.push(
+      { type: 'separator' },
+      {
+        label: process.platform === 'darwin' ? 'Start at login' : 'Start with Windows',
+        type: 'checkbox',
+        checked: autostart.isOn(),
+        click: (item) => {
+          autostart.set(item.checked);
+          refreshTrayMenu();
+        }
+      }
+    );
   }
 
   items.push({ type: 'separator' }, { label: 'Quit', click: () => app.quit() });
@@ -808,7 +824,10 @@ if (!gotLock) {
       openChat: (conversationId) => openChat(conversationId)
     });
 
-    showPicker();
+    // Start with the computer (on unless switched off in the tray). Started
+    // that way, stay in the tray rather than opening the picker.
+    autostart.init();
+    if (!autostart.launchedAtStartup()) showPicker();
 
     // Clicking the Dock icon (macOS) re-opens the picker.
     app.on('activate', () => {

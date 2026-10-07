@@ -35,7 +35,10 @@ const DEFAULTS = {
   primed: [],
   // Today's rolled task-reminder times — see reminder-schedule.js. Persisted
   // so a restart doesn't re-roll the day and fire a reminder twice.
-  reminderPlan: null
+  reminderPlan: null,
+  // True only once the person has switched "Start with Windows" OFF in the
+  // tray menu. Starting with the computer is the default (autostart.js).
+  autoStartOff: false
 };
 
 // Seen ids are pruned so the file can't grow forever. Because the timestamp is
@@ -59,13 +62,14 @@ function load() {
       seen: parsed.seen && typeof parsed.seen === 'object' ? parsed.seen : {},
       primed: Array.isArray(parsed.primed) ? parsed.primed.filter((p) => typeof p === 'string') : [],
       reminderPlan:
-        parsed.reminderPlan && typeof parsed.reminderPlan === 'object' ? parsed.reminderPlan : null
+        parsed.reminderPlan && typeof parsed.reminderPlan === 'object' ? parsed.reminderPlan : null,
+      autoStartOff: parsed.autoStartOff === true
     };
     prune();
   } catch {
     // Missing or corrupt file — start clean rather than crash. The cost is
     // one duplicate round of notifications, not a broken app.
-    state = { ...DEFAULTS, muted: [], seen: {}, primed: [], reminderPlan: null };
+    state = { ...DEFAULTS, muted: [], seen: {}, primed: [], reminderPlan: null, autoStartOff: false };
   }
   return state;
 }
@@ -167,8 +171,19 @@ function setReminderPlan(plan) {
   save();
 }
 
+function isAutoStartOff() {
+  return load().autoStartOff === true;
+}
+
+function setAutoStartOff(off) {
+  load().autoStartOff = Boolean(off);
+  save();
+}
+
 module.exports = {
   getSettings,
+  isAutoStartOff,
+  setAutoStartOff,
   setMuted,
   setQuietHours,
   isMuted,
