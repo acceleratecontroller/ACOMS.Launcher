@@ -21,7 +21,7 @@
 // in memory and re-read from the server; nothing of what people say to each
 // other is written to launcher-state.json.
 
-const { net, powerMonitor } = require('electron');
+const { app, net, powerMonitor } = require('electron');
 const popup = require('./popup');
 const chatFiles = require('./chat-files');
 const { jobLinkBaseFor } = require('./chat-links');
@@ -54,6 +54,7 @@ let baseUrl = null;
 let syncPath = '/api/chat/sync';
 let jobLinkBase = null; // where an A-number in a message links to (chat-links.js)
 let openChatWindow = null; // injected by main.js: (conversationId) => void
+let updateVersion = () => null; // injected by main.js: a newer version the updater found
 
 let me = null;
 let people = [];
@@ -102,7 +103,9 @@ function snapshot() {
     highlightId,
     jobLinkBase,
     openQuestions,
-    taskLabels
+    taskLabels,
+    // For "who is on an old Launcher": the newest version this PC knows of.
+    versions: [app.getVersion(), updateVersion()]
   };
 }
 
@@ -255,7 +258,7 @@ async function poll() {
   if (polling) return;
   polling = true;
   try {
-    const res = await request(syncPath, { method: 'POST', body: { since: cursor, idleSeconds: idleSeconds() } });
+    const res = await request(syncPath, { method: 'POST', body: { since: cursor, idleSeconds: idleSeconds(), appVersion: app.getVersion() } });
 
     if (!res.ok) {
       // A Controller without the chat routes answers 404 (or 405). That is "not
@@ -612,8 +615,9 @@ function setWindowState({ open, focused }) {
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 
-function init({ portals, config, openChat }) {
+function init({ portals, config, openChat, newerVersion }) {
   openChatWindow = openChat;
+  if (typeof newerVersion === 'function') updateVersion = newerVersion;
 
   const portal = config && portals.find((p) => p.id === config.portal);
   if (!portal) {

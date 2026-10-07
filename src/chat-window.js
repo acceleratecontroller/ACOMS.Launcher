@@ -141,6 +141,13 @@ function renderPeople() {
     const nameEl = el('span', 'person__name', row.person.name);
     const presence = Presence.presenceOf(row.person);
     if (presence.state === 'idle') nameEl.append(el('span', 'person__idle', ` · ${presence.label}`));
+    const latest = Presence.latestVersion(state.people, state.versions || []);
+    const old = Presence.behindLabel(row.person, latest);
+    if (old) {
+      const tag = el('span', 'person__old', ` · ${old} old`);
+      tag.title = `On Launcher ${row.person.appVersion} — the latest is ${latest}`;
+      nameEl.append(tag);
+    }
     text.append(nameEl);
     const last = row.conversation && row.conversation.lastMessage;
     if (isTypingIn(row.conversation)) {

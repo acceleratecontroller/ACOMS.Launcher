@@ -32,7 +32,39 @@
     return { state: 'active', label: 'online' };
   }
 
-  const api = { IDLE_SHOW_MS, shortSpan, presenceOf };
+  // ── Who is on an old Launcher (Dion 2026-10-07: "something that shows what
+  // version of the app someone is on if they're not on the latest") ──────
+
+  function parts(v) {
+    return String(v).split('.').map((n) => Number.parseInt(n, 10) || 0);
+  }
+
+  // -1 / 0 / 1, numerically: 1.0.10 is newer than 1.0.9.
+  function compareVersions(a, b) {
+    const x = parts(a);
+    const y = parts(b);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+      const d = (x[i] || 0) - (y[i] || 0);
+      if (d !== 0) return d < 0 ? -1 : 1;
+    }
+    return 0;
+  }
+
+  // The newest version known: anyone's report, mine, or one my updater found.
+  function latestVersion(people, extra = []) {
+    const all = [...(people || []).map((p) => p && p.appVersion), ...extra].filter(
+      (v) => typeof v === 'string' && /^\d+\.\d+\.\d+$/.test(v)
+    );
+    return all.reduce((best, v) => (best === null || compareVersions(v, best) > 0 ? v : best), null);
+  }
+
+  // "v1.0.18" when this person runs an older Launcher than the latest, else null.
+  function behindLabel(person, latest) {
+    if (!person || !person.appVersion || !latest) return null;
+    return compareVersions(person.appVersion, latest) < 0 ? `v${person.appVersion}` : null;
+  }
+
+  const api = { IDLE_SHOW_MS, shortSpan, presenceOf, compareVersions, latestVersion, behindLabel };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.acomsChatPresence = api;
 })(typeof window !== 'undefined' ? window : this);
