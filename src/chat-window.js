@@ -1147,10 +1147,10 @@ function renderComposerMode() {
     mode === 'question'
       ? 'This better be important'
       : mode === 'task'
-        ? "don't do it"
+        ? "Don't do it"
         : replyTo && replyTo.answering
-          ? 'be helpful'
-          : 'words go here stupid'; // Dion 2026-10-07: the long hint wrapped and he didn't like it
+          ? 'Be helpful'
+          : 'Words go here stupid'; // Dion 2026-10-07: the long hint wrapped and he didn't like it
   sendEl.textContent = mode === 'question' ? 'Ask' : mode === 'task' ? 'Give task' : 'Send';
 
   modeBarEl.replaceChildren();
