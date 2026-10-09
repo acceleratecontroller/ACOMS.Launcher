@@ -613,7 +613,14 @@ function openChat(conversationId) {
     return;
   }
 
+  // With chat's own tray icon there, that icon IS the way back to chat, so the
+  // window stays off the taskbar (Dion, 2026-10-09: the taskbar button "just
+  // takes up space and isn't needed"). No tray icon (macOS, or the tray
+  // failed) and the window keeps its taskbar button, or it could be lost.
+  const fromTray = Boolean(chatTray && !chatTray.isDestroyed());
+
   chatWindow = new BrowserWindow({
+    skipTaskbar: fromTray,
     width: 820,
     height: 640,
     minWidth: 560,
@@ -634,6 +641,11 @@ function openChat(conversationId) {
   attachLinkHandling(chatWindow.webContents);
   chatWindow.webContents.on('will-navigate', (event) => event.preventDefault());
   chatWindow.loadFile(path.join(__dirname, 'chat.html'));
+
+  // Off the taskbar, a minimised window would shrink to a stray title bar in
+  // the corner of the screen; put it away instead. The tray icon brings it
+  // back (openChat restores and shows it).
+  if (fromTray) chatWindow.on('minimize', () => chatWindow.hide());
 
   for (const evt of ['focus', 'blur', 'show', 'hide', 'minimize', 'restore']) {
     chatWindow.on(evt, reportChatWindow);
