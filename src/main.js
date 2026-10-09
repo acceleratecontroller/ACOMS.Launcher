@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, shell, screen, Tray, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeImage, shell, screen, Tray, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const updater = require('./updater');
@@ -626,7 +626,14 @@ function openChat(conversationId) {
     minWidth: 560,
     minHeight: 400,
     title: 'ACOMS Chat',
-    icon: path.join(__dirname, 'chat.png'),
+    // On Windows the title bar shows no icon at all (Dion, 2026-10-09: the
+    // little bubble up there "looks terrible ... would be better if it wasn't
+    // there at all"): a fully transparent one draws nothing. The tray icon is
+    // chat's real icon.
+    icon:
+      process.platform === 'win32'
+        ? nativeImage.createFromBitmap(Buffer.alloc(32 * 32 * 4), { width: 32, height: 32 })
+        : path.join(__dirname, 'chat.png'),
     webPreferences: {
       preload: path.join(__dirname, 'chat-preload.js'),
       contextIsolation: true,
@@ -637,6 +644,9 @@ function openChat(conversationId) {
 
   // Links in messages open like any other link: a portal's in its window,
   // anything else in the browser. The chat page itself never navigates away.
+  // No "File Edit View Window Help" strip: none of it is for chat (Dion,
+  // 2026-10-09). Copy, paste and the page's own Ctrl+F still work without it.
+  if (process.platform !== 'darwin') chatWindow.removeMenu();
   giveChatItsOwnTaskbarButton(chatWindow);
   attachLinkHandling(chatWindow.webContents);
   chatWindow.webContents.on('will-navigate', (event) => event.preventDefault());
