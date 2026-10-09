@@ -133,6 +133,8 @@ function rememberFocus(key, win) {
 let quickNoteWindow = null;
 // The chat window — one, reused.
 let chatWindow = null;
+// On the command line: open chat rather than the picker (chat's pinned button).
+const OPEN_CHAT_ARG = '--open-chat';
 // Sentinel id included in the "open" list so the picker can show a dot on the
 // Quick Note button while its window is open.
 const QUICK_NOTE_ID = '__quicknote__';
@@ -521,6 +523,37 @@ function chatBadge() {
   return { enabled: Boolean(chatConfig), status, unreadTotal };
 }
 
+// Chat gets a taskbar button of its own on Windows, with its own icon (Dion,
+// 2026-10-09). Before, it sat under the one Launcher button beside Controller
+// and every other portal, looking identical in the taskbar and Alt-Tab, so it
+// was easy to land in one when you meant the other ("it gets mixed up ... and
+// switches to the chat app and vice versa" — not just him).
+const CHAT_APP_ID = 'com.acceleratecontroller.acoms.launcher.chat';
+
+// The taskbar reads the icon from disk, and it can't see inside app.asar, so
+// the .ico ships unpacked beside it (build.asarUnpack in package.json).
+function outsideAsar(file) {
+  return file.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+}
+
+function giveChatItsOwnTaskbarButton(win) {
+  if (process.platform !== 'win32') return;
+  const details = {
+    appId: CHAT_APP_ID,
+    appIconPath: outsideAsar(path.join(__dirname, 'chat.ico')),
+    appIconIndex: 0,
+    relaunchDisplayName: 'ACOMS Chat'
+  };
+  // Pinned, the button starts the Launcher straight into chat. Running from
+  // source there is no installed program to point it at.
+  if (app.isPackaged) details.relaunchCommand = `"${process.execPath}" ${OPEN_CHAT_ARG}`;
+  try {
+    win.setAppDetails(details);
+  } catch (err) {
+    console.error('Could not give chat its own taskbar button:', err.message);
+  }
+}
+
 function openChat(conversationId) {
   if (!chatConfig) return;
   if (conversationId) chat.selectConversation(conversationId);
@@ -539,6 +572,7 @@ function openChat(conversationId) {
     minWidth: 560,
     minHeight: 400,
     title: 'ACOMS Chat',
+    icon: path.join(__dirname, 'chat.png'),
     webPreferences: {
       preload: path.join(__dirname, 'chat-preload.js'),
       contextIsolation: true,
@@ -549,6 +583,7 @@ function openChat(conversationId) {
 
   // Links in messages open like any other link: a portal's in its window,
   // anything else in the browser. The chat page itself never navigates away.
+  giveChatItsOwnTaskbarButton(chatWindow);
   attachLinkHandling(chatWindow.webContents);
   chatWindow.webContents.on('will-navigate', (event) => event.preventDefault());
   chatWindow.loadFile(path.join(__dirname, 'chat.html'));
@@ -781,8 +816,11 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    showPicker();
+  // Launched again — from the Start menu, a shortcut, or chat's pinned taskbar
+  // button (which asks for chat).
+  app.on('second-instance', (_event, argv) => {
+    if (argv.includes(OPEN_CHAT_ARG) && chatConfig) openChat();
+    else showPicker();
   });
 
   app.whenReady().then(() => {
@@ -842,7 +880,8 @@ if (!gotLock) {
     // Start with the computer (on unless switched off in the tray). Started
     // that way, stay in the tray rather than opening the picker.
     autostart.init();
-    if (!autostart.launchedAtStartup()) showPicker();
+    if (process.argv.includes(OPEN_CHAT_ARG) && chatConfig) openChat();
+    else if (!autostart.launchedAtStartup()) showPicker();
 
     // Clicking the Dock icon (macOS) re-opens the picker.
     app.on('activate', () => {
