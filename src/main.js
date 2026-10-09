@@ -308,6 +308,53 @@ function createTray() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Chat's own tray icon (Windows / Linux)
+// ---------------------------------------------------------------------------
+// A second icon beside the Launcher's, always there while the Launcher runs:
+// one click opens chat (Dion, 2026-10-09: "its own ... icon ... so its just
+// always there easy to click and open"). A red dot on it means unread
+// messages; the count is in the tooltip, as with the Launcher's icon.
+let chatTray = null;
+let chatTrayUnread = null; // which icon is showing, so it is only swapped on change
+
+function chatTrayIcon(unread) {
+  const name = unread ? 'chat-tray-unread' : 'chat-tray';
+  return path.join(__dirname, `${name}.${process.platform === 'win32' ? 'ico' : 'png'}`);
+}
+
+function createChatTray() {
+  if (process.platform === 'darwin' || !chatConfig) return;
+  try {
+    chatTray = new Tray(chatTrayIcon(false));
+    chatTrayUnread = false;
+    chatTray.on('click', () => openChat());
+    chatTray.on('double-click', () => openChat());
+    refreshChatTray();
+  } catch (err) {
+    // Chat is still in the Launcher's tray menu and the picker.
+    console.error('Could not create chat tray icon:', err.message);
+  }
+}
+
+function refreshChatTray() {
+  if (!chatTray || chatTray.isDestroyed()) return;
+  const unread = chat.unreadTotal();
+  if ((unread > 0) !== chatTrayUnread) {
+    chatTrayUnread = unread > 0;
+    chatTray.setImage(chatTrayIcon(chatTrayUnread));
+  }
+  chatTray.setToolTip(
+    unread > 0 ? `ACOMS Chat — ${unread} unread ${unread === 1 ? 'message' : 'messages'}` : 'ACOMS Chat'
+  );
+  chatTray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: unread > 0 ? `Open chat — ${unread} unread` : 'Open chat', click: () => openChat() },
+      { label: 'Open ACOMS Launcher', click: () => showPicker() }
+    ])
+  );
+}
+
 // Windows has no badge on a tray icon, so the count lives in the tooltip —
 // the thing you get by hovering the icon you were already reaching for.
 function refreshTrayTooltip() {
@@ -862,6 +909,7 @@ if (!gotLock) {
     chat.onChanged((snapshot) => {
       refreshTrayTooltip();
       refreshTrayMenu();
+      refreshChatTray();
       app.setBadgeCount(notifications.totalBadge() + chat.unreadTotal());
       if (chatWindow && !chatWindow.isDestroyed()) {
         chatWindow.webContents.send('chat:changed', snapshot);
@@ -876,6 +924,7 @@ if (!gotLock) {
       openChat: (conversationId) => openChat(conversationId),
       newerVersion: () => updater.snapshot().newVersion
     });
+    createChatTray();
 
     // Start with the computer (on unless switched off in the tray). Started
     // that way, stay in the tray rather than opening the picker.
@@ -890,6 +939,7 @@ if (!gotLock) {
   });
 
   app.on('before-quit', () => {
+    if (chatTray && !chatTray.isDestroyed()) chatTray.destroy();
     updater.dispose();
     notifications.dispose();
     chat.dispose();
