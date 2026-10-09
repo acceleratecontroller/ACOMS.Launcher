@@ -6,12 +6,13 @@ const {
   MAX_CARDS,
   CARD_WIDTH,
   CARD_HEIGHT,
-  CARD_GAP,
   WINDOW_PAD,
   SCREEN_MARGIN,
   pushCard,
   removeCard,
-  boundsFor,
+  slotBounds,
+  dragBounds,
+  onSomeScreen,
   initialOf
 } = require('../src/popup-rules');
 
@@ -60,26 +61,49 @@ test('removing a card that is not there changes nothing', () => {
 
 // ── Where it sits ──────────────────────────────────────────────────────────
 
-test('the window hugs the bottom-right of the WORK AREA, not the screen', () => {
+test('the first card hugs the bottom-right of the WORK AREA, not the screen', () => {
   // Work area excludes the taskbar — here a 48px one along the bottom.
   const workArea = { x: 0, y: 0, width: 1920, height: 1032 };
-  const b = boundsFor(workArea, 1);
+  const b = slotBounds(workArea, 0);
   assert.strictEqual(b.x + b.width, 1920 - SCREEN_MARGIN);
   assert.strictEqual(b.y + b.height, 1032 - SCREEN_MARGIN);
   assert.strictEqual(b.width, CARD_WIDTH + WINDOW_PAD * 2);
+  assert.strictEqual(b.height, CARD_HEIGHT + WINDOW_PAD * 2);
 });
 
-test('it grows upward by one card and one gap at a time', () => {
+test('each next card sits one window higher, touching but never overlapping', () => {
   const workArea = { x: 0, y: 0, width: 1920, height: 1032 };
-  const one = boundsFor(workArea, 1);
-  const three = boundsFor(workArea, 3);
-  assert.strictEqual(three.height - one.height, 2 * (CARD_HEIGHT + CARD_GAP));
-  assert.strictEqual(three.y + three.height, one.y + one.height, 'bottom edge stays put');
+  const s0 = slotBounds(workArea, 0);
+  const s1 = slotBounds(workArea, 1);
+  const s2 = slotBounds(workArea, 2);
+  assert.strictEqual(s1.y + s1.height, s0.y);
+  assert.strictEqual(s2.y + s2.height, s1.y);
+  assert.strictEqual(s2.x, s0.x);
 });
 
 test('a second monitor to the left (negative origin) is handled', () => {
-  const b = boundsFor({ x: -1920, y: 0, width: 1920, height: 1040 }, 2);
+  const b = slotBounds({ x: -1920, y: 0, width: 1920, height: 1040 }, 1);
   assert.strictEqual(b.x + b.width, 0 - SCREEN_MARGIN);
+});
+
+// ── Dragging ───────────────────────────────────────────────────────────────
+
+test('a dragged card follows the mouse and keeps its size', () => {
+  const start = { x: 1500, y: 900, width: 384, height: 120 };
+  const b = dragBounds(start, { x: 1600, y: 950 }, { x: 400, y: 120 });
+  assert.deepStrictEqual(b, { x: 300, y: 70, width: 384, height: 120 });
+});
+
+test('a card let go on a screen stays; one off every screen goes home', () => {
+  const screens = [
+    { x: 0, y: 0, width: 1920, height: 1032 },
+    { x: -1920, y: 0, width: 1920, height: 1040 }
+  ];
+  const w = { width: 384, height: 120 };
+  assert.ok(onSomeScreen({ ...w, x: 100, y: 100 }, screens));
+  assert.ok(onSomeScreen({ ...w, x: -1000, y: 500 }, screens), 'left monitor');
+  assert.ok(!onSomeScreen({ ...w, x: 100, y: 1000 }, screens), 'mostly under the taskbar');
+  assert.ok(!onSomeScreen({ ...w, x: 3000, y: 100 }, screens), 'a monitor since unplugged');
 });
 
 // ── The badge ──────────────────────────────────────────────────────────────
