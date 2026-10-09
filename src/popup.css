@@ -1,6 +1,6 @@
-/* Pop-up cards. The window is transparent and exactly the size of the stack
-   plus WINDOW_PAD (popup-rules.js) of room for the shadow — the numbers here
-   and there have to agree. */
+/* Pop-up cards. Each card has its own transparent window, exactly the size of
+   the card plus WINDOW_PAD (popup-rules.js) of room for the shadow — the
+   numbers here and there have to agree. */
 :root {
   --card: #1b2530;
   --card-hover: #223041;
@@ -29,10 +29,7 @@ body {
 }
 
 .stack {
-  display: flex;
-  flex-direction: column;
-  gap: 10px; /* CARD_GAP */
-  padding: 14px; /* WINDOW_PAD */
+  padding: 12px; /* WINDOW_PAD */
 }
 
 .card {
@@ -47,7 +44,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--card);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
   overflow: hidden;
   cursor: pointer;
 }
@@ -62,6 +59,10 @@ body {
 
 .card:hover {
   background: var(--card-hover);
+}
+
+.card--dragging {
+  cursor: grabbing;
 }
 
 .card--chat {
