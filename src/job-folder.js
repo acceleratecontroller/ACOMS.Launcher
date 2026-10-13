@@ -16,7 +16,10 @@
 //      or the job's folder not synced here.
 //
 // Synced folders are OneDrive placeholders, so listing them reads names only;
-// nothing is downloaded.
+// nothing is downloaded. On Windows every placeholder is a reparse point, and
+// Node lists a reparse point as a LINK, not a directory (libuv fs.c) — so a
+// link is stat'ed to see what it really is. Missing that is why v1.0.32 found
+// no libraries at all on a PC (2026-10-13).
 
 const { app, dialog, shell } = require('electron');
 const path = require('path');
@@ -46,12 +49,21 @@ async function isDir(p) {
 }
 
 async function subfolders(dir) {
+  let entries;
   try {
-    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-    return entries.filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => e.name);
+    entries = await fs.promises.readdir(dir, { withFileTypes: true });
   } catch {
     return [];
   }
+  const kept = await Promise.all(
+    entries.map(async (e) => {
+      if (e.name.startsWith('.')) return null;
+      if (e.isDirectory()) return e.name;
+      if (e.isSymbolicLink() && (await isDir(path.join(dir, e.name)))) return e.name;
+      return null;
+    })
+  );
+  return kept.filter(Boolean);
 }
 
 // Breadth-first, so the shallowest match wins and the common case (client /
@@ -115,6 +127,8 @@ async function open(number, card) {
   const libraries = libraryFolderNames(names).map((n) => path.join(root, n));
   if (libraries.length === 0 && / - /.test(path.basename(root))) libraries.push(root);
 
+  if (libraries.length === 0) return fail('no-libraries', { root });
+
   const folder = card && card.folder;
   let searchIn = libraries;
   if (folder && folder.library) {
@@ -168,4 +182,4 @@ async function settings() {
   return { root, chosen, libraries };
 }
 
-module.exports = { open, chooseRoot, clearRoot, settings };
+module.exports = { open, chooseRoot, clearRoot, settings, subfolders };

@@ -74,6 +74,8 @@
         return 'Show the launcher where your ACOMS SharePoint folder is, then try again.';
       case 'root-missing':
         return `Your ACOMS folder isn't there any more (${result.root}). Choose it again.`;
+      case 'no-libraries':
+        return `No synced SharePoint libraries in ${result.root}. Choose the folder that holds "SEQ - Client Projects - Documents".`;
       case 'not-synced':
         return `The ${result.library} library isn't synced on this computer. Sync it from SharePoint, then try again.`;
       case 'not-found':

@@ -615,7 +615,7 @@ function jobFolderRow(card) {
     note.replaceChildren(
       el('span', null, window.acomsJobFolderRules.failureMessage({ number: card.acomsNumber, ...res }))
     );
-    if (res.reason === 'no-root' || res.reason === 'root-missing') {
+    if (res.reason === 'no-root' || res.reason === 'root-missing' || res.reason === 'no-libraries') {
       const choose = el('button', 'job__folder-fix', 'Choose ACOMS folder…');
       choose.type = 'button';
       choose.addEventListener('click', async () => {
