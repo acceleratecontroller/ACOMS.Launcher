@@ -648,6 +648,13 @@ async function jobCards(numbers) {
   return wanted.map((n) => (jobCache.get(n) || {}).card).filter(Boolean);
 }
 
+// The cached card for a number, for "Open folder" — so the folder path comes
+// from Controller, never from the window.
+function jobCardFor(number) {
+  const hit = jobCache.get(String(number || '').toUpperCase());
+  return hit ? hit.card : null;
+}
+
 function setWindowState({ open, focused }) {
   const wasWatching = windowOpen && windowFocused;
   windowOpen = Boolean(open);
@@ -708,6 +715,7 @@ module.exports = {
   typing,
   search,
   jobCards,
+  jobCardFor,
   createRoom,
   getRoom,
   updateRoom,

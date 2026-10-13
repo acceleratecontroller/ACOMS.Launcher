@@ -141,6 +141,19 @@ body {
   line-height: 1.4;
 }
 
+.settings__buttons {
+  margin-top: 6px;
+}
+
+.settings__times.settings__buttons button {
+  margin-left: 0;
+}
+
+.settings__path {
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
 .settings__times {
   display: flex;
   align-items: center;

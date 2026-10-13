@@ -38,7 +38,10 @@ const DEFAULTS = {
   reminderPlan: null,
   // True only once the person has switched "Start with Windows" OFF in the
   // tray menu. Starting with the computer is the default (autostart.js).
-  autoStartOff: false
+  autoStartOff: false,
+  // The person's synced ACOMS SharePoint folder (job-folder.js). Null until
+  // they choose one; the usual place is then tried instead.
+  jobsRoot: null
 };
 
 // Seen ids are pruned so the file can't grow forever. Because the timestamp is
@@ -63,13 +66,14 @@ function load() {
       primed: Array.isArray(parsed.primed) ? parsed.primed.filter((p) => typeof p === 'string') : [],
       reminderPlan:
         parsed.reminderPlan && typeof parsed.reminderPlan === 'object' ? parsed.reminderPlan : null,
-      autoStartOff: parsed.autoStartOff === true
+      autoStartOff: parsed.autoStartOff === true,
+      jobsRoot: typeof parsed.jobsRoot === 'string' && parsed.jobsRoot ? parsed.jobsRoot : null
     };
     prune();
   } catch {
     // Missing or corrupt file — start clean rather than crash. The cost is
     // one duplicate round of notifications, not a broken app.
-    state = { ...DEFAULTS, muted: [], seen: {}, primed: [], reminderPlan: null, autoStartOff: false };
+    state = { ...DEFAULTS, muted: [], seen: {}, primed: [], reminderPlan: null, autoStartOff: false, jobsRoot: null };
   }
   return state;
 }
@@ -180,7 +184,18 @@ function setAutoStartOff(off) {
   save();
 }
 
+function getJobsRoot() {
+  return load().jobsRoot || null;
+}
+
+function setJobsRoot(dir) {
+  load().jobsRoot = typeof dir === 'string' && dir ? dir : null;
+  save();
+}
+
 module.exports = {
+  getJobsRoot,
+  setJobsRoot,
   getSettings,
   isAutoStartOff,
   setAutoStartOff,

@@ -20,6 +20,7 @@ const popup = require('./popup');
 const autostart = require('./autostart');
 const store = require('./store');
 const contextMenu = require('./context-menu');
+const jobFolder = require('./job-folder');
 
 // Thumbnails in chat load from acoms-file:// (chat-files.js); a scheme's
 // privileges can only be granted before the app is ready.
@@ -801,6 +802,13 @@ ipcMain.handle('chat:delete', (_event, id) => chat.deleteMessage(id));
 ipcMain.on('chat:typing', () => chat.typing());
 ipcMain.handle('chat:search', (_event, q) => chat.search(typeof q === 'string' ? q : ''));
 ipcMain.handle('chat:job-cards', (_event, numbers) => chat.jobCards(numbers));
+// A job's SharePoint folder on this computer (job-folder.js). Only the number
+// comes from the window; the path is the card Controller sent.
+ipcMain.handle('chat:open-job-folder', (_event, number) => {
+  const n = typeof number === 'string' ? number.toUpperCase() : '';
+  return jobFolder.open(n, chat.jobCardFor(n));
+});
+ipcMain.handle('chat:choose-jobs-root', () => jobFolder.chooseRoot(chatWindow));
 ipcMain.handle('chat:select-person', (_event, id) => chat.selectPerson(id));
 ipcMain.handle('chat:send', (_event, text, files, opts) =>
   chat.send(text, cleanOutgoingFiles(files), opts && typeof opts === 'object' ? opts : {})
@@ -861,6 +869,11 @@ ipcMain.handle('settings:set-muted', (_event, portalId, muted) => {
 ipcMain.handle('settings:set-quiet-hours', (_event, from, to) =>
   store.setQuietHours(from, to)
 );
+
+// Job folders: { root, chosen, libraries }.
+ipcMain.handle('settings:jobs-root', () => jobFolder.settings());
+ipcMain.handle('settings:choose-jobs-root', () => jobFolder.chooseRoot(pickerWindow));
+ipcMain.handle('settings:clear-jobs-root', () => jobFolder.clearRoot());
 
 // Version + update state for the picker's footer.
 ipcMain.handle('app:info', () => ({

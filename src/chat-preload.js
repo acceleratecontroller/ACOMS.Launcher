@@ -34,6 +34,10 @@ contextBridge.exposeInMainWorld('acomsChat', {
 
   // What WIP says about job numbers ["A1174"] — [{ number, found, name, … }].
   jobCards: (numbers) => ipcRenderer.invoke('chat:job-cards', numbers),
+  // Open a job's SharePoint folder on this computer. Resolves to { ok } or
+  // { ok: false, reason, number, library?, url? } — see job-folder-rules.js.
+  openJobFolder: (number) => ipcRenderer.invoke('chat:open-job-folder', number),
+  chooseJobsRoot: () => ipcRenderer.invoke('chat:choose-jobs-root'),
 
   // Resolves to { ok: boolean }; a failure's reason arrives as state.sendError.
   // files: [{ name, type, data: ArrayBuffer }] — uploaded by the main process.

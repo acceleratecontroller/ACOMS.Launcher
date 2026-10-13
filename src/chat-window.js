@@ -583,7 +583,60 @@ function fillJobCard(slot, card) {
   const facts = [card.client, card.siteAddress].filter(Boolean).join(' · ');
   if (facts) a.append(el('div', 'job__facts', facts));
   a.append(el('div', `job__po${card.po ? '' : ' job__po--none'}`, card.po ? `PO ${card.po}` : 'No PO yet'));
-  slot.replaceChildren(a);
+  slot.replaceChildren(a, jobFolderRow(card));
+}
+
+// "Open folder": the job's SharePoint folder in Explorer / Finder, from this
+// person's own synced copy (job-folder.js). When there is nothing to open it
+// says why, with the one button that fixes it.
+function jobFolderRow(card) {
+  const row = el('div', 'job__folder');
+  const btn = el('button', 'job__folder-open', '📁 Open folder');
+  btn.type = 'button';
+  btn.title = `Open ${card.acomsNumber}'s folder on this computer`;
+  const note = el('div', 'job__folder-note');
+  note.hidden = true;
+
+  async function openIt() {
+    btn.disabled = true;
+    note.hidden = true;
+    let res;
+    try {
+      res = await window.acomsChat.openJobFolder(card.number);
+    } catch {
+      res = { ok: false, reason: 'error' };
+    }
+    btn.disabled = false;
+    if (res && res.ok) return;
+    showProblem(res || {});
+  }
+
+  function showProblem(res) {
+    note.replaceChildren(
+      el('span', null, window.acomsJobFolderRules.failureMessage({ number: card.acomsNumber, ...res }))
+    );
+    if (res.reason === 'no-root' || res.reason === 'root-missing') {
+      const choose = el('button', 'job__folder-fix', 'Choose ACOMS folder…');
+      choose.type = 'button';
+      choose.addEventListener('click', async () => {
+        const settings = await window.acomsChat.chooseJobsRoot();
+        if (settings && settings.root) openIt();
+      });
+      note.append(choose);
+    }
+    if (res.url) {
+      const web = el('a', 'job__folder-fix', 'Open in SharePoint');
+      web.href = res.url;
+      web.target = '_blank';
+      web.rel = 'noopener noreferrer';
+      note.append(web);
+    }
+    note.hidden = false;
+  }
+
+  btn.addEventListener('click', openIt);
+  row.append(btn, note);
+  return row;
 }
 
 function renderJobCards(text) {
