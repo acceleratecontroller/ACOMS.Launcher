@@ -19,10 +19,15 @@ const chatFiles = require('./chat-files');
 const popup = require('./popup');
 const autostart = require('./autostart');
 const store = require('./store');
+const contextMenu = require('./context-menu');
 
 // Thumbnails in chat load from acoms-file:// (chat-files.js); a scheme's
 // privileges can only be granted before the app is ready.
 chatFiles.registerScheme();
+
+// Right-click menu (spelling suggestions, cut/copy/paste) for every window,
+// hooked before any window exists so none is missed.
+contextMenu.init();
 
 // ---------------------------------------------------------------------------
 // Portal config
