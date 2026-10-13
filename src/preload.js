@@ -73,5 +73,9 @@ contextBridge.exposeInMainWorld('acoms', {
   // { muted: string[], quietFrom: "HH:MM"|null, quietTo: "HH:MM"|null }
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setMuted: (portalId, muted) => ipcRenderer.invoke('settings:set-muted', portalId, muted),
-  setQuietHours: (from, to) => ipcRenderer.invoke('settings:set-quiet-hours', from, to)
+  setQuietHours: (from, to) => ipcRenderer.invoke('settings:set-quiet-hours', from, to),
+  // Job folders: { root, chosen, libraries }.
+  getJobsRoot: () => ipcRenderer.invoke('settings:jobs-root'),
+  chooseJobsRoot: () => ipcRenderer.invoke('settings:choose-jobs-root'),
+  clearJobsRoot: () => ipcRenderer.invoke('settings:clear-jobs-root')
 });

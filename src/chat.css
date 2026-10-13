@@ -927,6 +927,48 @@ a.job:hover {
   opacity: 0.6;
 }
 
+/* "Open folder" under a job card: the job's SharePoint folder on this computer. */
+.job__folder {
+  margin-top: 3px;
+  font-size: 12px;
+}
+
+.job__folder-open,
+.job__folder-fix {
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.22);
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.job__folder-open:hover,
+.job__folder-fix:hover {
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.job__folder-open:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.job__folder-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+
+.job__folder-note[hidden] {
+  display: none;
+}
+
 /* ── Send modes: important questions, tasks, replies (Dion 2026-10-07) ── */
 :root {
   --question: #f59e0b;

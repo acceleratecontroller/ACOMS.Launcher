@@ -204,6 +204,61 @@ function renderSettings() {
     ? 'No notifications during these hours. Counts still update, so nothing is lost — you just are not interrupted.'
     : 'Set both times to stop notifications overnight. A range may cross midnight.';
   settingsPanel.appendChild(note);
+
+  renderJobFolders();
+}
+
+// Job folders: where this computer's synced ACOMS SharePoint folder is, so
+// "Open folder" on a chat job card can open the job's folder (job-folder.js).
+async function renderJobFolders() {
+  const section = document.createElement('div');
+  settingsPanel.appendChild(section);
+
+  const draw = (jobs) => {
+    section.innerHTML = '';
+    const h = document.createElement('p');
+    h.className = 'settings__heading';
+    h.textContent = 'Job folders';
+    section.appendChild(h);
+
+    const where = document.createElement('p');
+    where.className = 'settings__note settings__path';
+    where.textContent = jobs.root
+      ? `${jobs.root}${jobs.chosen ? '' : ' (found automatically)'}`
+      : 'Not set';
+    section.appendChild(where);
+
+    const buttons = document.createElement('div');
+    buttons.className = 'settings__times settings__buttons';
+    const choose = document.createElement('button');
+    choose.type = 'button';
+    choose.textContent = jobs.root ? 'Change…' : 'Choose…';
+    choose.addEventListener('click', async () => draw(await window.acoms.chooseJobsRoot()));
+    buttons.appendChild(choose);
+    if (jobs.chosen) {
+      const clear = document.createElement('button');
+      clear.type = 'button';
+      clear.textContent = 'Clear';
+      clear.addEventListener('click', async () => draw(await window.acoms.clearJobsRoot()));
+      buttons.appendChild(clear);
+    }
+    section.appendChild(buttons);
+
+    const help = document.createElement('p');
+    help.className = 'settings__note';
+    help.textContent = !jobs.root
+      ? 'Pick your synced ACOMS SharePoint folder — the one holding "SEQ - Client Projects - Documents". Then "Open folder" on a job in chat opens it here.'
+      : jobs.libraries.length > 0
+        ? `Synced here: ${jobs.libraries.map((l) => l.split(' - ')[0]).join(', ')}.`
+        : 'No synced libraries in this folder — pick the one holding "SEQ - Client Projects - Documents".';
+    section.appendChild(help);
+  };
+
+  try {
+    draw(await window.acoms.getJobsRoot());
+  } catch {
+    section.remove();
+  }
 }
 
 function renderPortals() {
