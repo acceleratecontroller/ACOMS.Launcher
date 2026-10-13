@@ -21,6 +21,7 @@ const autostart = require('./autostart');
 const store = require('./store');
 const contextMenu = require('./context-menu');
 const jobFolder = require('./job-folder');
+const { failureMessage } = require('./job-folder-rules');
 
 // Thumbnails in chat load from acoms-file:// (chat-files.js); a scheme's
 // privileges can only be granted before the app is ready.
@@ -164,6 +165,12 @@ function notifyOpenStateChanged() {
 
 function findPortalForUrl(url) {
   return findPortalForUrlRule(url, portals);
+}
+
+// A page served over https from one of the configured portals — the only
+// pages allowed to ask the Launcher for anything (portal-preload.js).
+function isPortalPage(url) {
+  return typeof url === 'string' && /^https:\/\//i.test(url) && Boolean(findPortalForUrl(url));
 }
 
 // What happens when page content asks for a new window (target="_blank" or
@@ -488,6 +495,8 @@ function openPortal(id, targetUrl, opts = {}) {
     show: false,
     title: view ? `${portal.name} — ${view.label}` : portal.name,
     webPreferences: {
+      // window.acomsLauncher: the 📁 job-folder buttons in WIP.
+      preload: path.join(__dirname, 'portal-preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true
@@ -809,6 +818,24 @@ ipcMain.handle('chat:open-job-folder', (_event, number) => {
   return jobFolder.open(n, chat.jobCardFor(n));
 });
 ipcMain.handle('chat:choose-jobs-root', () => jobFolder.chooseRoot(chatWindow));
+// The same, from a portal page (WIP's 📁 buttons, portal-preload.js). Only a
+// configured portal may ask. The folder comes from Controller's job card, as
+// in chat; with no ACOMS folder chosen yet, the picker opens right here and
+// the job is tried again, since the page has no settings of its own to offer.
+ipcMain.handle('portal:open-job-folder', async (event, number) => {
+  if (!isPortalPage(event.senderFrame && event.senderFrame.url)) {
+    return { ok: false, reason: 'error', message: 'Not allowed from this page.' };
+  }
+  const n = typeof number === 'string' ? number.trim().toUpperCase() : '';
+  const cards = await chat.jobCards([n]).catch(() => []);
+  const card = (cards || []).find((c) => c.number === n) || null;
+  let res = await jobFolder.open(n, card);
+  if (!res.ok && ['no-root', 'root-missing', 'no-libraries'].includes(res.reason)) {
+    const settings = await jobFolder.chooseRoot(BrowserWindow.fromWebContents(event.sender));
+    if (settings && settings.root) res = await jobFolder.open(n, card);
+  }
+  return res.ok ? res : { ...res, message: failureMessage(res) };
+});
 ipcMain.handle('chat:select-person', (_event, id) => chat.selectPerson(id));
 ipcMain.handle('chat:send', (_event, text, files, opts) =>
   chat.send(text, cleanOutgoingFiles(files), opts && typeof opts === 'object' ? opts : {})
