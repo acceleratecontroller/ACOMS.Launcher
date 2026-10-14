@@ -25,6 +25,13 @@ contextBridge.exposeInMainWorld('acoms', {
     return () => ipcRenderer.removeListener('portals:open-changed', listener);
   },
 
+  // The shown portal list changed (a local-only portal started or stopped answering).
+  onPortalsChanged: (callback) => {
+    const listener = (_event, list) => callback(list);
+    ipcRenderer.on('portals:list-changed', listener);
+    return () => ipcRenderer.removeListener('portals:list-changed', listener);
+  },
+
   // Returns { version, update: { status, newVersion, percent, message, ... } }.
   getAppInfo: () => ipcRenderer.invoke('app:info'),
 
