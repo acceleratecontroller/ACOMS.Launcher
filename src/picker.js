@@ -460,6 +460,12 @@ async function init() {
     render();
   });
 
+  // A local-only portal (the Brain Console) started or stopped answering on this computer.
+  window.acoms.onPortalsChanged((list) => {
+    portals = list || [];
+    render();
+  });
+
   window.acoms.onUpdateChanged((snapshot) => {
     update = snapshot || null;
     renderUpdate();

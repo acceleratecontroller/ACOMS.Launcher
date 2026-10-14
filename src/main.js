@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, nativeImage, shell, screen, Tray, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeImage, shell, screen, Tray, Menu, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const updater = require('./updater');
@@ -14,6 +14,7 @@ const {
   sameUrl,
   viewerBounds
 } = require('./window-rules');
+const { normaliseLocal, visiblePortals, probeLocal } = require('./local-portals');
 const chat = require('./chat');
 const chatFiles = require('./chat-files');
 const popup = require('./popup');
@@ -57,7 +58,11 @@ function loadConfig() {
         // Optional named pages that get their own tile half and window
         // (WIP's Scheduler). See window-rules.js.
         views: normaliseViews(p.views)
-      }));
+      }))
+      // `localOnly` portals run on this computer (the Brain Console); one pointing
+      // anywhere else is dropped. See local-portals.js.
+      .map(normaliseLocal)
+      .filter(Boolean);
     // Optional Quick Note strip — two deep links into ACOMS.Controller: a
     // "new" action (compose a fresh note) and a "view" action (browse notes).
     // Older single-url configs still work as the "new" action.
@@ -99,6 +104,9 @@ function loadConfig() {
   }
 }
 
+// Every configured portal, and the ones shown: a localOnly portal is shown only while
+// it answers on this computer (local-portals.js), re-checked whenever the picker opens.
+let allPortals = [];
 let portals = [];
 let quickNote = null;
 let chatConfig = null;
@@ -250,6 +258,7 @@ function positionPicker(win) {
 }
 
 function showPicker() {
+  refreshLocalPortals().catch(() => {});
   if (pickerWindow && !pickerWindow.isDestroyed()) {
     positionPicker(pickerWindow);
     pickerWindow.show();
@@ -758,6 +767,17 @@ function openImageViewer(file) {
 // ---------------------------------------------------------------------------
 // IPC (renderer <-> main)
 // ---------------------------------------------------------------------------
+async function refreshLocalPortals() {
+  const up = await probeLocal(allPortals, net.fetch);
+  const next = visiblePortals(allPortals, up);
+  const changed = next.map((p) => p.id).join() !== portals.map((p) => p.id).join();
+  portals = next;
+  if (changed) {
+    refreshTrayMenu();
+    if (pickerWindow && !pickerWindow.isDestroyed()) pickerWindow.webContents.send('portals:list-changed', portals);
+  }
+}
+
 ipcMain.handle('portals:get', () => ({
   portals,
   openIds: openPortalIds(),
@@ -939,7 +959,9 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     const cfg = loadConfig();
-    portals = cfg.portals;
+    allPortals = cfg.portals;
+    portals = visiblePortals(allPortals, []);
+    refreshLocalPortals().catch(() => {});
     quickNote = cfg.quickNote;
     chatConfig = cfg.chat;
     createTray();
