@@ -6,10 +6,15 @@
 // main process; this page shows one picture and lets you look at it:
 //
 //   - opens fitted to the window (never enlarged past actual size);
-//   - click toggles fit <-> actual size, centred on where you clicked;
+//   - click zooms in around where you clicked (to actual size, or to double
+//     when it already shows at actual size), and a second click fits again;
 //   - mouse wheel zooms around the pointer; drag pans once it is bigger than
 //     the window;
-//   - Esc closes, 0 fits, 1 actual size, + and - zoom.
+//   - Esc closes, 0 fits, 1 actual size, + and - zoom (buttons too).
+//
+// Dion, 2026-10-14: on a big screen a snip already showed at actual size, so
+// clicking it went "back to fit" — nothing happened, and it looked like the
+// picture couldn't be zoomed. A click now always zooms in.
 
 const stageEl = document.getElementById('stage');
 const imgEl = document.getElementById('img');
@@ -69,6 +74,19 @@ function actual(x, y) {
   setScale(1, x, y);
 }
 
+// What a click on a fitted picture zooms to: actual size when the window
+// shrank it, double when it already shows at actual size.
+function zoomIn(x, y) {
+  fitted = false;
+  setScale(fitScale() < 1 ? 1 : 2, x, y);
+}
+
+function step(factor) {
+  if (imgEl.hidden) return;
+  fitted = false;
+  setScale(scale * factor);
+}
+
 function stagePoint(event) {
   const r = stageEl.getBoundingClientRect();
   return { x: event.clientX - r.left, y: event.clientY - r.top };
@@ -85,16 +103,22 @@ function show(next) {
   statusEl.textContent = 'Loading…';
   imgEl.hidden = true;
   imgEl.alt = next.name;
-  imgEl.src = `acoms-file://attachment/${encodeURIComponent(next.id)}`;
+  const src = `acoms-file://attachment/${encodeURIComponent(next.id)}`;
+  // The window is reused: the same picture again fires no 'load', so show it
+  // from here rather than leave it on "Loading…".
+  if (imgEl.getAttribute('src') === src && imgEl.complete && imgEl.naturalWidth > 0) shown();
+  else imgEl.src = src;
 }
 
-imgEl.addEventListener('load', () => {
+function shown() {
   statusEl.hidden = true;
   imgEl.hidden = false;
   stageEl.scrollLeft = 0;
   stageEl.scrollTop = 0;
   fit();
-});
+}
+
+imgEl.addEventListener('load', shown);
 
 imgEl.addEventListener('error', () => {
   imgEl.hidden = true;
@@ -155,10 +179,9 @@ window.addEventListener('mouseup', (event) => {
   if (!wasClick || !stageEl.contains(event.target)) return;
 
   const { x, y } = stagePoint(event);
-  // Already at (or past) actual size, or a picture that fits at 100%: go back
-  // to fitted. Otherwise show it at actual size around the click.
-  if (!fitted || fitScale() >= 1) fit();
-  else actual(x, y);
+  // Zoomed: back to fitted. Fitted: zoom in around the click.
+  if (fitted) zoomIn(x, y);
+  else fit();
 });
 
 // ── Keys and buttons ───────────────────────────────────────────────────────
@@ -167,15 +190,12 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') window.acomsViewer.close();
   else if (event.key === '0') fit();
   else if (event.key === '1') actual();
-  else if (event.key === '+' || event.key === '=') {
-    fitted = false;
-    setScale(scale * WHEEL_STEP);
-  } else if (event.key === '-') {
-    fitted = false;
-    setScale(scale / WHEEL_STEP);
-  }
+  else if (event.key === '+' || event.key === '=') step(WHEEL_STEP * WHEEL_STEP);
+  else if (event.key === '-') step(1 / (WHEEL_STEP * WHEEL_STEP));
 });
 
+document.getElementById('zoom-out').addEventListener('click', () => step(1 / (WHEEL_STEP * WHEEL_STEP)));
+document.getElementById('zoom-in').addEventListener('click', () => step(WHEEL_STEP * WHEEL_STEP));
 document.getElementById('fit').addEventListener('click', fit);
 document.getElementById('actual').addEventListener('click', () => actual());
 document.getElementById('close').addEventListener('click', () => window.acomsViewer.close());
