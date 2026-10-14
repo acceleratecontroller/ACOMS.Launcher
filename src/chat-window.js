@@ -423,13 +423,27 @@ function renderMessage(m, readAt) {
   return bubble;
 }
 
+// The thread as last drawn, by id — so a quote can look at what it quotes.
+let drawnById = new Map();
+
+// A reply to a picture sent with no words carried an empty quote until
+// Controller started quoting it as "📷 Photo" (2026-10-14), and an empty quote
+// read "Message deleted". For those older replies, say what the original is
+// when it is still in the thread; only a really deleted one says deleted.
+function quoteWords(quote) {
+  if (quote.text) return quote.text;
+  const original = drawnById.get(quote.id);
+  if (original && !original.deletedAt) return Files.previewText(original) || 'Message';
+  return original ? 'Message deleted' : 'Earlier message';
+}
+
 function renderQuote(quote) {
   const q = el('button', 'msg__quote');
   q.type = 'button';
   q.title = 'Show the message this replies to';
   q.append(
     el('span', 'msg__quote-who', `${quote.kind === 'question' ? '❓ ' : ''}${quote.senderName || ''}`),
-    el('span', 'msg__quote-text', quote.text || 'Message deleted')
+    el('span', 'msg__quote-text', quoteWords(quote))
   );
   q.addEventListener('click', () => jumpTo({ id: quote.id }));
   return q;
@@ -877,6 +891,7 @@ function renderMessages() {
 
   // A new day gets its heading; a quiet spell of 15+ minutes gets a faint line
   // with "2 hours later" in the middle (both on one line when they coincide).
+  drawnById = new Map(msgs.map((m) => [m.id, m]));
   let lastDay = '';
   let prev = null;
   for (const m of msgs) {
