@@ -13,8 +13,15 @@
   <body>
     <header class="top">
       <nav class="tabs" role="tablist" aria-label="Task Manager">
+        <!-- The page's order: ACOMS Tasks, Quick Tasks, Recurring, Quick Notes. -->
+        <button id="tab-acoms" class="tab" type="button" role="tab" data-tab="acoms">
+          ACOMS Tasks <span id="badge-acoms" class="tab__badges"></span>
+        </button>
         <button id="tab-quick" class="tab tab--on" type="button" role="tab" data-tab="quick">
           Quick Tasks <span id="badge-quick" class="tab__badges"></span>
+        </button>
+        <button id="tab-recurring" class="tab" type="button" role="tab" data-tab="recurring">
+          Recurring Tasks <span id="badge-recurring" class="tab__badges"></span>
         </button>
         <button id="tab-notes" class="tab" type="button" role="tab" data-tab="notes">
           Quick Notes <span id="badge-notes" class="tab__badges"></span>
@@ -51,6 +58,35 @@
         <select id="owner-filter" class="select" aria-label="Owner"></select>
       </div>
       <div id="task-list" class="list"></div>
+    </section>
+
+    <!-- ── ACOMS Tasks (the company queue) ─────────────────────────────── -->
+    <section id="pane-acoms" class="pane" hidden>
+      <div class="toolbar">
+        <div id="company-chips" class="chips"></div>
+        <button id="toggle-done-company" class="chip" type="button">Show done</button>
+      </div>
+      <p id="company-note" class="pane__note" hidden>Only admins and managers can take a task from this list for now.</p>
+      <div id="company-list" class="list"></div>
+    </section>
+
+    <!-- ── Recurring Tasks ─────────────────────────────────────────────── -->
+    <section id="pane-recurring" class="pane" hidden>
+      <div class="toolbar">
+        <button class="btn btn--primary" type="button" id="add-recurring">+ Add Recurring Task</button>
+        <button id="toggle-archived-recurring" class="btn btn--ghost" type="button">Active</button>
+        <div class="seg">
+          <button id="rec-view-list" class="seg__btn seg__btn--on" type="button">List</button>
+          <button id="rec-view-cal" class="seg__btn" type="button">Calendar</button>
+        </div>
+        <div id="rec-chips" class="chips"></div>
+        <select id="rec-more-filter" class="select" aria-label="More filters">
+          <option value="all">All Tasks</option>
+          <option value="on-track">On Track</option>
+        </select>
+        <select id="rec-owner-filter" class="select" aria-label="Owner"></select>
+      </div>
+      <div id="recurring-list" class="list"></div>
     </section>
 
     <!-- ── Quick Notes ─────────────────────────────────────────────────── -->

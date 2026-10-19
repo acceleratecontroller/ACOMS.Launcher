@@ -158,6 +158,180 @@
     };
   }
 
+  // ── ACOMS Tasks (the company queue) ────────────────────────────────────────
+  // CompanyTaskRow.tsx + the page's companyBadges / visibleCompanyTasks.
+
+  // The assignee of an UNCLAIMED company task (Controller modules/tasks/constants.ts).
+  const COMPANY_ASSIGNEE_ID = 'acoms-company';
+
+  const CATEGORY_LABELS = {
+    GENERAL: 'General',
+    GIS_VIEW_REQUEST: 'GIS view needed',
+    JOB_APPROVAL: 'Job approval',
+    JOB_FINISH: 'Finish job',
+    CERT_EXPIRY: 'Certificate expiring',
+    ASSET_EXPIRY: 'Asset expiring',
+    CONTRACT_EXPIRY: 'Contract expiring',
+    MAIL_FOLLOWUP: 'Email follow-up',
+    DIAL_LODGE: 'Dials to lodge',
+    DIAL_EXPIRY: 'Dial expiring'
+  };
+
+  const SOURCE_LABELS = {
+    'acoms-wip': 'WIP',
+    'acoms-gis': 'GIS',
+    'acoms-os': 'OS',
+    'acoms-email': 'Email',
+    'mail-intake': 'Requests inbox',
+    'claude-terminal': 'Claude'
+  };
+
+  function isUnclaimed(task) {
+    return task.assigneeId === COMPANY_ASSIGNEE_ID;
+  }
+
+  // As the Quick Tasks pill, with the queue's own wording ("Done", "Due today").
+  function companyDuePill(task, now) {
+    if (done(task)) return { text: 'Done', tone: 'done' };
+    const p = duePill(task, now);
+    return p.tone === 'today' ? { text: 'Due today', tone: 'today' } : p;
+  }
+
+  function companyBadges(company, myId) {
+    const open = (company || []).filter((t) => !t.isArchived && !done(t));
+    return {
+      unclaimed: open.filter(isUnclaimed).length,
+      mine: myId ? open.filter((t) => t.assigneeId === myId).length : 0
+    };
+  }
+
+  // filter: all | unclaimed | mine | dismissed. Unclaimed first (newest on
+  // top), then claimed, then done when shown; "Not needed" newest dismissed first.
+  function visibleCompany(company, dismissed, { filter = 'all', showDone = false, myId = null } = {}) {
+    if (filter === 'dismissed') {
+      return [...(dismissed || [])].sort((a, b) => ((b.archivedAt || '') > (a.archivedAt || '') ? 1 : -1));
+    }
+    const rank = (t) => (done(t) ? 2 : isUnclaimed(t) ? 0 : 1);
+    return (company || [])
+      .filter((t) => showDone || !done(t))
+      .filter((t) =>
+        filter === 'unclaimed' ? isUnclaimed(t) : filter === 'mine' ? Boolean(myId) && t.assigneeId === myId : true
+      )
+      .sort((a, b) => rank(a) - rank(b) || (b.createdAt > a.createdAt ? 1 : -1));
+  }
+
+  // ── Recurring Tasks ────────────────────────────────────────────────────────
+  // RecurringTaskRow.tsx + the page's filteredRecurring / groupedRecurring.
+
+  const FREQUENCY_OPTIONS = [
+    { value: 'DAILY', label: 'Daily (Mon–Fri)' },
+    { value: 'WEEKLY', label: 'Weekly' },
+    { value: 'FORTNIGHTLY', label: 'Fortnightly' },
+    { value: 'MONTHLY', label: 'Monthly' },
+    { value: 'QUARTERLY', label: 'Quarterly' },
+    { value: 'YEARLY', label: 'Yearly' }
+  ];
+
+  const SCHEDULE_OPTIONS = [
+    { value: 'FLOATING', label: 'Floating (from completion date)' },
+    { value: 'FIXED', label: 'Fixed (anchored schedule)' }
+  ];
+
+  const RECURRING_CATEGORY_OPTIONS = ['Task', 'Meeting', 'Report', 'Inspection', 'Maintenance'].map((v) => ({
+    value: v,
+    label: v
+  }));
+
+  function frequencyLabel(type, value) {
+    const hit = FREQUENCY_OPTIONS.find((o) => o.value === type);
+    const label = hit ? hit.label : type;
+    return value === 1 ? label : `Every ${value} ${label.toLowerCase()}`;
+  }
+
+  // filter: all | overdue | due-today | due-soon | on-track; owner '' = everyone.
+  function filterRecurring(list, { filter = 'all', owner = '' } = {}, now) {
+    const filtered = (list || []).filter((t) => {
+      let match = true;
+      switch (filter) {
+        case 'overdue': match = isOverdue(t.nextDue, now); break;
+        case 'due-today': match = isDueToday(t.nextDue, now); break;
+        case 'due-soon': match = isDueSoon(t.nextDue, now) && !isDueToday(t.nextDue, now); break;
+        case 'on-track':
+          match = !isOverdue(t.nextDue, now) && !isDueToday(t.nextDue, now) && !isDueSoon(t.nextDue, now);
+          break;
+        default: break;
+      }
+      if (owner && t.assigneeId !== owner) match = false;
+      return match;
+    });
+    return filtered.sort((a, b) => {
+      const ao = isOverdue(a.nextDue, now);
+      const bo = isOverdue(b.nextDue, now);
+      if (ao !== bo) return ao ? -1 : 1;
+      if (!a.nextDue && !b.nextDue) return 0;
+      if (!a.nextDue) return 1;
+      if (!b.nextDue) return -1;
+      return new Date(a.nextDue) - new Date(b.nextDue);
+    });
+  }
+
+  // Already sorted (filterRecurring): one group per next-due day.
+  function groupRecurring(sorted, now) {
+    const groups = [];
+    let lastKey = null;
+    for (const t of sorted) {
+      const key = t.nextDue ? isoDay(t.nextDue) : 'no-date';
+      if (key !== lastKey) {
+        groups.push({ label: key === 'no-date' ? 'No Due Date' : groupLabel(t.nextDue, now), tasks: [] });
+        lastKey = key;
+      }
+      groups[groups.length - 1].tasks.push(t);
+    }
+    return groups;
+  }
+
+  // The row's status pill: On Track / Overdue Nd / Due Today / Due Soon.
+  function recurringStatus(task, now) {
+    if (isOverdue(task.nextDue, now)) {
+      const days = Math.round((today(now) - dateOnly(task.nextDue)) / 86400000);
+      return { text: `Overdue ${days}d`, tone: 'overdue' };
+    }
+    if (isDueToday(task.nextDue, now)) return { text: 'Due Today', tone: 'today' };
+    if (isDueSoon(task.nextDue, now)) return { text: 'Due Soon', tone: 'soon' };
+    return { text: 'On Track', tone: 'done' };
+  }
+
+  function recurringBadges(list, now) {
+    const active = (list || []).filter((t) => !t.isArchived);
+    return {
+      overdue: active.filter((t) => isOverdue(t.nextDue, now)).length,
+      dueToday: active.filter((t) => isDueToday(t.nextDue, now)).length,
+      dueSoon: active.filter((t) => isDueSoon(t.nextDue, now) && !isDueToday(t.nextDue, now)).length
+    };
+  }
+
+  // The calendar view (RecurringCalendar.tsx): 6 weeks from the Sunday on or
+  // before the 1st of `month`, each day with the tasks next due on it.
+  function calendarDays(list, year, month, now) {
+    const first = new Date(year, month, 1);
+    const start = new Date(first);
+    start.setDate(start.getDate() - first.getDay());
+    const t = today(now).getTime();
+    const days = [];
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const key = isoDay(d);
+      days.push({
+        date: d,
+        inMonth: d.getMonth() === month,
+        isToday: d.getTime() === t,
+        tasks: (list || []).filter((x) => x.nextDue && isoDay(x.nextDue) === key)
+      });
+    }
+    return days;
+  }
+
   // ── Quick Notes ────────────────────────────────────────────────────────────
 
   // Pinned first (most recently pinned on top), then most recently edited.
@@ -231,6 +405,47 @@
       case 'note:discard':
         s.notes = (s.notes || []).filter((x) => x.id !== action.id);
         break;
+      // Company tasks: `action.me` is my employee id (what a claim writes).
+      case 'company:claim':
+        s.company = patchList(s.company, action.id, {
+          assigneeId: action.me || COMPANY_ASSIGNEE_ID,
+          claimedAt: new Date().toISOString(),
+          status: 'NOT_STARTED'
+        });
+        break;
+      case 'company:release':
+        s.company = patchList(s.company, action.id, { assigneeId: COMPANY_ASSIGNEE_ID, claimedAt: null });
+        break;
+      case 'company:done':
+        s.company = patchList(s.company, action.id, { status: 'COMPLETED', completedAt: new Date().toISOString() });
+        break;
+      case 'company:dismiss': {
+        const t = (s.company || []).find((x) => x.id === action.id);
+        s.company = (s.company || []).filter((x) => x.id !== action.id);
+        if (t) {
+          s.dismissed = [
+            { ...t, isArchived: true, archivedAt: new Date().toISOString(), archivedById: action.me || null, closedReason: action.reason || null },
+            ...(s.dismissed || [])
+          ];
+        }
+        break;
+      }
+      case 'recurring:create':
+        s.recurring = [
+          { id: `pending-${Date.now()}`, isArchived: false, nextDue: null, lastCompleted: null, ...(action.fields || {}), _pending: true },
+          ...(s.recurring || [])
+        ];
+        break;
+      case 'recurring:update':
+        s.recurring = patchList(s.recurring, action.id, action.fields || {});
+        break;
+      // The next due date is the server's sum (recurrence.ts); only "done today" shows now.
+      case 'recurring:complete':
+        s.recurring = patchList(s.recurring, action.id, { lastCompleted: new Date().toISOString(), _pending: true });
+        break;
+      case 'recurring:archive':
+        s.recurring = (s.recurring || []).filter((x) => x.id !== action.id);
+        break;
       default:
         break;
     }
@@ -288,6 +503,22 @@
     groupTasks,
     duePill,
     taskBadges,
+    COMPANY_ASSIGNEE_ID,
+    CATEGORY_LABELS,
+    SOURCE_LABELS,
+    isUnclaimed,
+    companyDuePill,
+    companyBadges,
+    visibleCompany,
+    FREQUENCY_OPTIONS,
+    SCHEDULE_OPTIONS,
+    RECURRING_CATEGORY_OPTIONS,
+    frequencyLabel,
+    filterRecurring,
+    groupRecurring,
+    recurringStatus,
+    recurringBadges,
+    calendarDays,
     sortNotes,
     assigneeName,
     myEmployeeId,
