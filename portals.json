@@ -6,6 +6,7 @@
   "_viewsComment": "'views' (optional, per portal) are named pages that get their own half of the tile and their own window: 'id', 'label', 'tagline', a root-relative 'path', and 'maximize' to open it filling the screen. WIP's Scheduler is the first. Any tile can also open a second window: the + on the right, or Shift-click.",
   "_chatComment": "'chat' is optional: which portal hosts the chat routes (POST <sync> is what the launcher polls). Remove the block and the launcher simply has no chat.",
   "_chatJobsComment": "'chat.jobs' (optional): an A-number typed in a chat message (A1174, A1016B) links to <that portal's url><path><number>. Remove it and A-numbers stay plain text.",
+  "_tasksComment": "'tasks' (optional): the local Tasks window and its tray icon (src/tasks.js). 'portal' hosts GET <sync>, the one call that feeds the window; 'jobs' is where a task's A-number links (as chat.jobs); 'email' is the portal a task's source email opens in. Admins only for now. Remove the block and there is no Tasks window.",
   "_localOnlyComment": "'localOnly': true marks a portal that runs on this computer (an http://127.0.0.1 address), not on Vercel. Its tile shows only while it answers on 'probe' - so the Brain Console appears on the computers that run it (Dion's, JD's) and nowhere else. See src/local-portals.js.",
   "chat": {
     "portal": "acoms-controller",
@@ -14,6 +15,15 @@
       "portal": "acoms-wip",
       "path": "/jobs/"
     }
+  },
+  "tasks": {
+    "portal": "acoms-controller",
+    "sync": "/api/tasks/sync",
+    "jobs": {
+      "portal": "acoms-wip",
+      "path": "/jobs/"
+    },
+    "email": "acoms-email"
   },
   "quickNote": {
     "tagline": "Jot or browse Controller notes",

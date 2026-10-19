@@ -16,6 +16,7 @@ const {
 } = require('./window-rules');
 const { normaliseLocal, visiblePortals, probeLocal } = require('./local-portals');
 const chat = require('./chat');
+const tasks = require('./tasks');
 const chatFiles = require('./chat-files');
 const popup = require('./popup');
 const autostart = require('./autostart');
@@ -97,10 +98,22 @@ function loadConfig() {
             jobs: chatRaw.jobs && typeof chatRaw.jobs === 'object' ? chatRaw.jobs : undefined
           }
         : null;
-    return { portals: list, quickNote: qn, chat: chatCfg };
+    // Optional tasks block: the local Tasks window (tasks.js). No block, no
+    // Tasks window or tray icon.
+    const tasksRaw = parsed.tasks;
+    const tasksCfg =
+      tasksRaw && typeof tasksRaw === 'object' && typeof tasksRaw.portal === 'string'
+        ? {
+            portal: tasksRaw.portal,
+            sync: typeof tasksRaw.sync === 'string' ? tasksRaw.sync : undefined,
+            jobs: tasksRaw.jobs && typeof tasksRaw.jobs === 'object' ? tasksRaw.jobs : undefined,
+            email: typeof tasksRaw.email === 'string' ? tasksRaw.email : undefined
+          }
+        : null;
+    return { portals: list, quickNote: qn, chat: chatCfg, tasks: tasksCfg };
   } catch (err) {
     console.error('Failed to load portals.json:', err.message);
-    return { portals: [], quickNote: null, chat: null };
+    return { portals: [], quickNote: null, chat: null, tasks: null };
   }
 }
 
@@ -110,6 +123,7 @@ let allPortals = [];
 let portals = [];
 let quickNote = null;
 let chatConfig = null;
+let tasksConfig = null;
 
 // ---------------------------------------------------------------------------
 // Window bookkeeping
@@ -150,6 +164,9 @@ let quickNoteWindow = null;
 let chatWindow = null;
 // On the command line: open chat rather than the picker (chat's pinned button).
 const OPEN_CHAT_ARG = '--open-chat';
+// The Tasks window — one, reused — and its command-line switch.
+let tasksWindow = null;
+const OPEN_TASKS_ARG = '--open-tasks';
 // Sentinel id included in the "open" list so the picker can show a dot on the
 // Quick Note button while its window is open.
 const QUICK_NOTE_ID = '__quicknote__';
@@ -377,6 +394,64 @@ function refreshChatTray() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// The Tasks tray icon (Windows / Linux)
+// ---------------------------------------------------------------------------
+// Like chat's: its own icon beside the Launcher's, one click opens the Tasks
+// window (Dion, 2026-10-19: "gets its own icon like the chat app does" — tray
+// only, no taskbar button). A red dot means tasks of yours are overdue; the
+// count is in the tooltip. Admins only for now, so it is made the first time
+// sync says the person is an ADMIN and never shown to anyone else.
+let tasksTray = null;
+let tasksTrayDue = null; // which icon is showing, so it is only swapped on change
+
+function tasksTrayIcon(due) {
+  const name = due ? 'tasks-tray-due' : 'tasks-tray';
+  return path.join(__dirname, `${name}.${process.platform === 'win32' ? 'ico' : 'png'}`);
+}
+
+function tasksMenuLabel() {
+  const n = tasks.overdueCount();
+  return n > 0 ? `Tasks — ${n} overdue` : 'Tasks';
+}
+
+function refreshTasksTray() {
+  if (process.platform === 'darwin' || !tasksConfig) return;
+  if (!tasks.isAdmin()) {
+    if (tasksTray && !tasksTray.isDestroyed()) tasksTray.destroy();
+    tasksTray = null;
+    return;
+  }
+  if (!tasksTray || tasksTray.isDestroyed()) {
+    try {
+      tasksTray = new Tray(tasksTrayIcon(false));
+      tasksTrayDue = false;
+      tasksTray.on('click', () => openTasks());
+      tasksTray.on('double-click', () => openTasks());
+    } catch (err) {
+      // Tasks is still in the Launcher's tray menu.
+      console.error('Could not create tasks tray icon:', err.message);
+      tasksTray = null;
+      return;
+    }
+  }
+  const overdue = tasks.overdueCount();
+  if ((overdue > 0) !== tasksTrayDue) {
+    tasksTrayDue = overdue > 0;
+    tasksTray.setImage(tasksTrayIcon(tasksTrayDue));
+  }
+  tasksTray.setToolTip(overdue > 0 ? `ACOMS Tasks — ${overdue} overdue` : 'ACOMS Tasks');
+  tasksTray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: 'Open tasks', click: () => openTasks() },
+      { label: 'New task…', click: () => openTasks('new-task') },
+      { label: 'New quick note…', click: () => openTasks('new-note') },
+      { type: 'separator' },
+      { label: 'Open ACOMS Launcher', click: () => showPicker() }
+    ])
+  );
+}
+
 // Windows has no badge on a tray icon, so the count lives in the tooltip —
 // the thing you get by hovering the icon you were already reaching for.
 function refreshTrayTooltip() {
@@ -414,6 +489,7 @@ function refreshTrayMenu() {
           }
         ]
       : []),
+    ...(tasks.isAdmin() ? [{ label: tasksMenuLabel(), click: () => openTasks() }] : []),
     { type: 'separator' },
     { label: `Version ${u.version}`, enabled: false }
   ];
@@ -692,6 +768,110 @@ function openChat(conversationId) {
   hidePicker();
 }
 
+// ---------------------------------------------------------------------------
+// Tasks window
+// ---------------------------------------------------------------------------
+// A local page (tasks.html), like chat: it opens instantly because nothing is
+// fetched to draw it, and it talks only to tasks.js over IPC. `command` (from
+// the tray menu) asks it to start a new task or note once it's up.
+const TASKS_APP_ID = 'com.acceleratecontroller.acoms.launcher.tasks';
+let tasksWindowReady = false;
+let tasksPendingCommand = null;
+
+function reportTasksWindow() {
+  const open = Boolean(tasksWindow && !tasksWindow.isDestroyed() && tasksWindow.isVisible());
+  tasks.setWindowState({
+    open: open && !tasksWindow.isMinimized(),
+    focused: open && tasksWindow.isFocused()
+  });
+}
+
+function sendTasksCommand(command) {
+  if (!command) return;
+  if (tasksWindowReady && tasksWindow && !tasksWindow.isDestroyed()) {
+    tasksWindow.webContents.send('tasks:command', command);
+  } else {
+    tasksPendingCommand = command;
+  }
+}
+
+function openTasks(command) {
+  if (!tasksConfig) return;
+
+  if (tasksWindow && !tasksWindow.isDestroyed()) {
+    bringForward(tasksWindow);
+    sendTasksCommand(command);
+    hidePicker();
+    return;
+  }
+
+  // Its tray icon is the way back, so no taskbar button (Dion's pick, as chat).
+  const fromTray = Boolean(tasksTray && !tasksTray.isDestroyed());
+  tasksWindowReady = false;
+  tasksPendingCommand = command || null;
+
+  tasksWindow = new BrowserWindow({
+    skipTaskbar: fromTray,
+    width: 980,
+    height: 720,
+    minWidth: 620,
+    minHeight: 420,
+    title: 'ACOMS Tasks',
+    backgroundColor: '#0f1419',
+    // No title-bar icon on Windows, as chat (a transparent one draws nothing).
+    icon:
+      process.platform === 'win32'
+        ? nativeImage.createFromBitmap(Buffer.alloc(32 * 32 * 4), { width: 32, height: 32 })
+        : path.join(__dirname, 'tasks-tray.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'tasks-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+
+  if (process.platform !== 'darwin') tasksWindow.removeMenu();
+  if (process.platform === 'win32') {
+    // Its own group in Alt-Tab, apart from the portals (chat's reason).
+    const details = {
+      appId: TASKS_APP_ID,
+      appIconPath: outsideAsar(path.join(__dirname, 'tasks.ico')),
+      appIconIndex: 0,
+      relaunchDisplayName: 'ACOMS Tasks'
+    };
+    if (app.isPackaged) details.relaunchCommand = `"${process.execPath}" ${OPEN_TASKS_ARG}`;
+    try {
+      tasksWindow.setAppDetails(details);
+    } catch (err) {
+      console.error('Could not set the tasks window details:', err.message);
+    }
+  }
+  // A job opens in WIP's window, a source email in ACOMS.Email's, anything
+  // else in the browser — the Launcher's usual link handling.
+  attachLinkHandling(tasksWindow.webContents);
+  tasksWindow.webContents.on('will-navigate', (event) => event.preventDefault());
+  tasksWindow.webContents.on('did-finish-load', () => {
+    tasksWindowReady = true;
+    const pendingCommand = tasksPendingCommand;
+    tasksPendingCommand = null;
+    sendTasksCommand(pendingCommand);
+  });
+  tasksWindow.loadFile(path.join(__dirname, 'tasks.html'));
+
+  if (fromTray) tasksWindow.on('minimize', () => tasksWindow.hide());
+  for (const evt of ['focus', 'blur', 'show', 'hide', 'minimize', 'restore']) {
+    tasksWindow.on(evt, reportTasksWindow);
+  }
+  tasksWindow.on('closed', () => {
+    tasksWindow = null;
+    tasksWindowReady = false;
+    reportTasksWindow();
+  });
+
+  hidePicker();
+}
+
 // A file the chat window wants sent: a name, a type and the bytes, nothing
 // else carried through.
 function cleanOutgoingFiles(files) {
@@ -903,6 +1083,19 @@ ipcMain.handle('chat:sign-in', () => {
   if (chatConfig) openPortal(chatConfig.portal);
 });
 
+// Tasks. The window asks; tasks.js does the talking to Controller.
+ipcMain.handle('tasks:get', () => tasks.snapshot());
+ipcMain.handle('tasks:act', (_event, action) =>
+  tasks.act(action && typeof action === 'object' ? JSON.parse(JSON.stringify(action)) : null)
+);
+ipcMain.handle('tasks:archived', (_event, kind, open) => tasks.loadArchived(String(kind || ''), open !== false));
+ipcMain.handle('tasks:search-jobs', (_event, q) => tasks.searchJobs(typeof q === 'string' ? q : ''));
+ipcMain.handle('tasks:clear-error', () => tasks.clearError());
+ipcMain.handle('tasks:retry', () => tasks.pollNow());
+ipcMain.handle('tasks:sign-in', () => {
+  if (tasksConfig) openPortal(tasksConfig.portal);
+});
+
 ipcMain.handle('settings:get', () => store.getSettings());
 
 ipcMain.handle('settings:set-muted', (_event, portalId, muted) => {
@@ -954,6 +1147,7 @@ if (!gotLock) {
   // button (which asks for chat).
   app.on('second-instance', (_event, argv) => {
     if (argv.includes(OPEN_CHAT_ARG) && chatConfig) openChat();
+    else if (argv.includes(OPEN_TASKS_ARG) && tasksConfig) openTasks();
     else showPicker();
   });
 
@@ -964,6 +1158,7 @@ if (!gotLock) {
     refreshLocalPortals().catch(() => {});
     quickNote = cfg.quickNote;
     chatConfig = cfg.chat;
+    tasksConfig = cfg.tasks;
     createTray();
 
     // Keep the tray menu and the picker footer in step with the updater.
@@ -1015,10 +1210,27 @@ if (!gotLock) {
     });
     createChatTray();
 
+    // Tasks: same session, same cookie. Its state goes to the Tasks window in
+    // full; the tray icon and menu follow its overdue count.
+    let tasksMenuState = '';
+    tasks.onChanged((snapshot) => {
+      refreshTasksTray();
+      const menuState = `${tasks.isAdmin()}:${tasks.overdueCount()}`;
+      if (menuState !== tasksMenuState) {
+        tasksMenuState = menuState;
+        refreshTrayMenu();
+      }
+      if (tasksWindow && !tasksWindow.isDestroyed()) {
+        tasksWindow.webContents.send('tasks:changed', snapshot);
+      }
+    });
+    tasks.init({ portals, config: tasksConfig });
+
     // Start with the computer (on unless switched off in the tray). Started
     // that way, stay in the tray rather than opening the picker.
     autostart.init();
     if (process.argv.includes(OPEN_CHAT_ARG) && chatConfig) openChat();
+    else if (process.argv.includes(OPEN_TASKS_ARG) && tasksConfig) openTasks();
     else if (!autostart.launchedAtStartup()) showPicker();
 
     // Clicking the Dock icon (macOS) re-opens the picker.
@@ -1029,6 +1241,8 @@ if (!gotLock) {
 
   app.on('before-quit', () => {
     if (chatTray && !chatTray.isDestroyed()) chatTray.destroy();
+    if (tasksTray && !tasksTray.isDestroyed()) tasksTray.destroy();
+    tasks.dispose();
     updater.dispose();
     notifications.dispose();
     chat.dispose();

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Same lock-down as chat: our own files only, no remote loads. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:;"
+    />
+    <title>ACOMS Tasks</title>
+    <link rel="stylesheet" href="tasks.css" />
+  </head>
+  <body>
+    <header class="top">
+      <nav class="tabs" role="tablist" aria-label="Task Manager">
+        <button id="tab-quick" class="tab tab--on" type="button" role="tab" data-tab="quick">
+          Quick Tasks <span id="badge-quick" class="tab__badges"></span>
+        </button>
+        <button id="tab-notes" class="tab" type="button" role="tab" data-tab="notes">
+          Quick Notes <span id="badge-notes" class="tab__badges"></span>
+        </button>
+      </nav>
+      <p id="me" class="top__me"></p>
+    </header>
+
+    <div id="notice" class="notice" hidden></div>
+    <div id="action-error" class="action-error" hidden></div>
+
+    <!-- ── Quick Tasks ─────────────────────────────────────────────────── -->
+    <section id="pane-quick" class="pane">
+      <form id="quick-add" class="quick-add">
+        <input
+          id="quick-add-input"
+          class="quick-add__input"
+          type="text"
+          maxlength="300"
+          autocomplete="off"
+          placeholder="Type a task and press Enter (yours, due tomorrow) — Ctrl+N for the full form"
+        />
+        <button class="btn btn--primary" type="button" id="add-task">+ Add Task</button>
+      </form>
+      <div class="toolbar">
+        <button id="toggle-archived" class="btn btn--ghost" type="button">Active</button>
+        <div id="chips" class="chips"></div>
+        <select id="more-filter" class="select" aria-label="More filters">
+          <option value="all">All Tasks</option>
+          <option value="pending">Pending</option>
+          <option value="completed">Completed</option>
+          <option value="high">High Priority</option>
+        </select>
+        <select id="owner-filter" class="select" aria-label="Owner"></select>
+      </div>
+      <div id="task-list" class="list"></div>
+    </section>
+
+    <!-- ── Quick Notes ─────────────────────────────────────────────────── -->
+    <section id="pane-notes" class="pane" hidden>
+      <div class="toolbar">
+        <button class="btn btn--primary" type="button" id="add-note">+ Add Quick Note</button>
+        <button id="toggle-archived-notes" class="btn btn--ghost" type="button">Active</button>
+      </div>
+      <div id="note-grid" class="notes"></div>
+    </section>
+
+    <!-- Dialogs: task form, note editor, confirm. Drawn by tasks-window.js. -->
+    <div id="dialog" class="dialog" hidden></div>
+
+    <script src="tasks-rules.js"></script>
+    <script src="tasks-window.js"></script>
+  </body>
+</html>
