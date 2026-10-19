@@ -194,14 +194,25 @@ point someone at it.
 ACOMS.Controller's Task Manager as a window of the launcher's own, so it opens
 the moment you click it: a blue ✓ icon in the system tray, beside chat's. A red
 dot on it means tasks of yours are overdue (the count is in the tooltip);
-right-click for **New task…** and **New quick note…**.
+right-click for **New task…** and **New quick note…**. The dot counts what's
+yours: Quick Tasks, Recurring Tasks and the company tasks you've claimed.
 
 - **Quick Tasks** — the same list, filters and order as the `/tasks` page. Type
   a task in the box at the top and press Enter to add it (yours, due tomorrow);
   **+ Add Task** or Ctrl+N for the full form. Click a task to edit it; ✓
   completes it. A task's job opens in WIP, its source email in ACOMS.Email.
+- **ACOMS Tasks** — the company queue the apps raise (job approvals, GIS
+  views, the requests inbox…): **I'll take it**, **Release**, **Done**, **Not
+  needed** (with a reason), **Reopen**. The title opens where the work is done;
+  the A-number opens the job in WIP. Admins and managers can act on it.
+- **Recurring Tasks** — list or calendar, the page's filters; ✓ marks one done
+  and Controller works out the next due date.
 - **Quick Notes** — your own notes. They save as you type; a note left empty
   is thrown away. ✓ on a note turns it into a task.
+
+Ctrl+1–4 switch tabs; Ctrl+N starts a new one of whatever the tab holds. The
+✅ button at the top of the picker opens it too (the way in on a Mac, which has
+no tray).
 
 Where it lives: nothing is stored on your computer. The tasks stay in
 Controller, so the page and the window always agree; the launcher reads them
@@ -213,7 +224,7 @@ chat, it rides your Controller sign-in — if it says **Sign in**, that is what
 it needs.
 
 Admins only for now: the tray icon appears once Controller says you are an
-admin, and no one else sees it. ACOMS Tasks and Recurring Tasks come next.
+admin, and no one else sees it.
 
 ## Updates
 

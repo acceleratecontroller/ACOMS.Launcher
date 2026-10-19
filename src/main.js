@@ -410,6 +410,11 @@ function tasksTrayIcon(due) {
   return path.join(__dirname, `${name}.${process.platform === 'win32' ? 'ico' : 'png'}`);
 }
 
+// All the picker gets: whether to offer the button, and a number.
+function tasksBadge() {
+  return { enabled: Boolean(tasksConfig) && tasks.isAdmin(), overdue: tasks.overdueCount() };
+}
+
 function tasksMenuLabel() {
   const n = tasks.overdueCount();
   return n > 0 ? `Tasks — ${n} overdue` : 'Tasks';
@@ -1083,7 +1088,10 @@ ipcMain.handle('chat:sign-in', () => {
   if (chatConfig) openPortal(chatConfig.portal);
 });
 
-// Tasks. The window asks; tasks.js does the talking to Controller.
+// Tasks. The window asks; tasks.js does the talking to Controller. The picker
+// only opens it and shows the overdue count.
+ipcMain.handle('tasks:open', () => openTasks());
+ipcMain.handle('tasks:badge', () => tasksBadge());
 ipcMain.handle('tasks:get', () => tasks.snapshot());
 ipcMain.handle('tasks:act', (_event, action) =>
   tasks.act(action && typeof action === 'object' ? JSON.parse(JSON.stringify(action)) : null)
@@ -1219,6 +1227,9 @@ if (!gotLock) {
       if (menuState !== tasksMenuState) {
         tasksMenuState = menuState;
         refreshTrayMenu();
+        if (pickerWindow && !pickerWindow.isDestroyed()) {
+          pickerWindow.webContents.send('tasks:badge-changed', tasksBadge());
+        }
       }
       if (tasksWindow && !tasksWindow.isDestroyed()) {
         tasksWindow.webContents.send('tasks:changed', snapshot);

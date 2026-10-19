@@ -11,6 +11,8 @@ const settingsPanel = document.getElementById('settings-panel');
 const settingsToggle = document.getElementById('settings-toggle');
 const chatOpen = document.getElementById('chat-open');
 const chatUnread = document.getElementById('chat-unread');
+const tasksOpen = document.getElementById('tasks-open');
+const tasksOverdue = document.getElementById('tasks-overdue');
 
 let portals = [];
 let quickNote = null;
@@ -420,6 +422,16 @@ function renderChatBadge(badge) {
   chatOpen.title = n > 0 ? `Chat — ${n} unread` : 'Chat';
 }
 
+// The Tasks button: admins only for now, with the overdue count on its corner.
+function renderTasksBadge(badge) {
+  const b = badge || {};
+  tasksOpen.hidden = !b.enabled;
+  const n = b.overdue || 0;
+  tasksOverdue.hidden = n === 0;
+  tasksOverdue.textContent = n > 99 ? '99+' : String(n);
+  tasksOpen.title = n > 0 ? `Tasks — ${n} overdue` : 'Tasks';
+}
+
 function render() {
   renderQuickNote();
   renderPortals();
@@ -447,6 +459,10 @@ async function init() {
     settingsToggle.setAttribute('aria-expanded', String(opening));
     if (opening) renderSettings();
   });
+
+  tasksOpen.addEventListener('click', () => window.acoms.openTasks());
+  renderTasksBadge(await window.acoms.getTasksBadge());
+  window.acoms.onTasksBadgeChanged(renderTasksBadge);
 
   chatOpen.addEventListener('click', () => window.acoms.openChat());
   renderChatBadge(await window.acoms.getChatBadge());

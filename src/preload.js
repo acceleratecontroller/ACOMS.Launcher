@@ -67,6 +67,16 @@ contextBridge.exposeInMainWorld('acoms', {
     return () => ipcRenderer.removeListener('notifications:changed', listener);
   },
 
+  // The Tasks window: the picker only opens it and shows how many of mine are
+  // overdue. { enabled, overdue } — enabled only for admins for now.
+  openTasks: () => ipcRenderer.invoke('tasks:open'),
+  getTasksBadge: () => ipcRenderer.invoke('tasks:badge'),
+  onTasksBadgeChanged: (callback) => {
+    const listener = (_event, badge) => callback(badge);
+    ipcRenderer.on('tasks:badge-changed', listener);
+    return () => ipcRenderer.removeListener('tasks:badge-changed', listener);
+  },
+
   // Chat lives in its own window; the picker only opens it and shows how many
   // messages are unread. { enabled, status, unreadTotal }
   openChat: () => ipcRenderer.invoke('chat:open'),

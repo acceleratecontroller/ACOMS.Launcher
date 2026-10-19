@@ -15,7 +15,16 @@ const ui = {
   owner: null, // null = not chosen yet (defaults to me once known); '' = all owners
   archived: false,
   notesArchived: false,
-  dialog: null // { kind: 'task' | 'note' | 'confirm', ... }
+  // ACOMS Tasks: all | unclaimed | mine | dismissed, and whether done ones show.
+  companyFilter: 'all',
+  companyShowDone: false,
+  // Recurring: its own filter / owner / archive, and list or calendar.
+  recFilter: 'all',
+  recOwner: null,
+  recArchived: false,
+  recView: 'list',
+  recMonth: null, // { y, m } shown in the calendar; null = this month
+  dialog: null // { kind: 'task' | 'recurring' | 'note' | 'confirm', ... }
 };
 
 // ── Little DOM helpers ─────────────────────────────────────────────────────
@@ -157,7 +166,9 @@ function render() {
   if (!state) return;
   renderTop();
   renderNotice();
+  renderCompany();
   renderQuick();
+  renderRecurring();
   renderNotes();
 }
 
@@ -175,11 +186,24 @@ function counts(b) {
 
 function renderTop() {
   for (const b of document.querySelectorAll('.tab')) b.classList.toggle('tab--on', b.dataset.tab === ui.tab);
-  $('pane-quick').hidden = ui.tab !== 'quick';
-  $('pane-notes').hidden = ui.tab !== 'notes';
+  for (const tab of ['acoms', 'quick', 'recurring', 'notes']) $(`pane-${tab}`).hidden = ui.tab !== tab;
 
-  const mine = (state.quick || []).filter((t) => !state.myEmployeeId || t.assigneeId === state.myEmployeeId);
-  $('badge-quick').replaceChildren(...counts(R.taskBadges(mine)));
+  const own = (list) => (list || []).filter((t) => !state.myEmployeeId || t.assigneeId === state.myEmployeeId);
+  $('badge-quick').replaceChildren(...counts(R.taskBadges(own(state.quick))));
+  $('badge-recurring').replaceChildren(...counts(R.recurringBadges(own(state.recurring))));
+  const cb = R.companyBadges(state.company, state.myEmployeeId);
+  const acoms = [];
+  if (cb.unclaimed) {
+    const s = el('span', 'count count--today', String(cb.unclaimed));
+    s.title = `${cb.unclaimed} unclaimed`;
+    acoms.push(s);
+  }
+  if (cb.mine) {
+    const s = el('span', 'count count--plain', String(cb.mine));
+    s.title = `${cb.mine} with you`;
+    acoms.push(s);
+  }
+  $('badge-acoms').replaceChildren(...acoms);
   const noteCount = (state.notes || []).length;
   $('badge-notes').replaceChildren(...(noteCount ? [el('span', 'count count--plain', String(noteCount))] : []));
 
@@ -203,8 +227,8 @@ function renderNotice() {
     parts.push([el('span', 'notice__text', `Can't reach Controller (${state.errorMessage || 'no answer'}).${shown}`), b]);
   } else if (state.status === 'unavailable') {
     parts.push([el('span', 'notice__text', "This Controller doesn't have the Tasks feed yet.")]);
-  } else if (state.status === 'ok' && !state.isAdmin) {
-    parts.push([el('span', 'notice__text', 'Quick Tasks and Quick Notes are for admins for now.')]);
+  } else if (state.status === 'ok' && !state.isAdmin && ui.tab !== 'acoms') {
+    parts.push([el('span', 'notice__text', 'Quick Tasks, Recurring Tasks and Quick Notes are for admins for now.')]);
   }
   box.hidden = parts.length === 0;
   box.replaceChildren(...(parts[0] || []));
@@ -417,6 +441,431 @@ function noteCard(note) {
 function firstLine(text) {
   const line = String(text || '').split('\n').map((s) => s.trim()).find(Boolean) || '';
   return line.length > 120 ? `${line.slice(0, 117)}…` : line;
+}
+
+// ── ACOMS Tasks ────────────────────────────────────────────────────────────
+// The company queue. A company task isn't edited here — the app that raised
+// it owns it, and its title LINKS to where the work is done; the actions are
+// take / release / done / not needed (CompanyTaskRow.tsx).
+
+const COMPANY_FILTERS = [
+  { key: 'all', label: () => 'All open' },
+  { key: 'unclaimed', label: (b) => `Unclaimed${b.unclaimed ? ` (${b.unclaimed})` : ''}` },
+  { key: 'mine', label: (b) => `Mine${b.mine ? ` (${b.mine})` : ''}` },
+  { key: 'dismissed', label: () => `Not needed${state.dismissed && state.dismissed.length ? ` (${state.dismissed.length})` : ''}` }
+];
+
+function renderCompany() {
+  const badges = R.companyBadges(state.company, state.myEmployeeId);
+  $('company-chips').replaceChildren(
+    ...COMPANY_FILTERS.map((f) => {
+      const b = el('button', `chip${ui.companyFilter === f.key ? ' chip--on' : ''}`, f.label(badges));
+      b.type = 'button';
+      b.addEventListener('click', () => {
+        ui.companyFilter = f.key;
+        render();
+      });
+      return b;
+    })
+  );
+  const doneBtn = $('toggle-done-company');
+  doneBtn.textContent = ui.companyShowDone ? 'Showing done' : 'Show done';
+  doneBtn.classList.toggle('chip--on', ui.companyShowDone);
+  $('company-note').hidden = state.status !== 'ok' || state.isManager;
+
+  const list = $('company-list');
+  const shown = R.visibleCompany(state.company, state.dismissed, {
+    filter: ui.companyFilter,
+    showDone: ui.companyShowDone,
+    myId: state.myEmployeeId
+  });
+  if (shown.length === 0) {
+    const empty = el('div', 'empty');
+    empty.append(
+      el('p', null, state.status === 'idle' ? 'Loading…' : 'Nothing in the queue'),
+      el('p', 'pane__note', 'Tasks raised for the company by WIP, GIS, OS, the requests inbox or Job Creator land here.')
+    );
+    list.replaceChildren(empty);
+    return;
+  }
+  list.replaceChildren(...shown.map(companyRow));
+}
+
+// A link from the task's producer; Job Creator's are Controller-relative.
+function companyLink(task) {
+  if (!task.linkUrl) return null;
+  try {
+    return new URL(task.linkUrl, state.controllerBase || undefined).toString();
+  } catch {
+    return null;
+  }
+}
+
+function companyRow(task) {
+  const unclaimed = R.isUnclaimed(task);
+  const mine = Boolean(state.myEmployeeId) && task.assigneeId === state.myEmployeeId;
+  const done = task.status === 'COMPLETED';
+  const dismissed = task.isArchived;
+  const holder = unclaimed ? null : assigneeById(task.assigneeId);
+  const holderName = holder ? R.assigneeName(holder) : 'Someone';
+  const requester = task.requestedById ? assigneeById(task.requestedById) : null;
+  const dismisser = task.archivedById ? assigneeById(task.archivedById) : null;
+  const pill = R.companyDuePill(task);
+
+  const row = el('div', `crow row--${task.priority || 'LOW'}`);
+  if (done || dismissed) row.classList.add('crow--done');
+  if (task._pending) row.classList.add('crow--saving');
+
+  const main = el('div', 'crow__main');
+  const tags = el('div', 'crow__tags');
+  tags.append(el('span', 'pill pill--cat', R.CATEGORY_LABELS[task.category] || task.category));
+  if (task.acomsNumber) {
+    tags.append(
+      state.jobLinkBase
+        ? link(state.jobLinkBase + encodeURIComponent(task.acomsNumber), 'crow__num pill pill--job', task.acomsNumber, `Open ${task.acomsNumber} in WIP`)
+        : el('span', 'crow__num', task.acomsNumber)
+    );
+  }
+  tags.append(el('span', `pill pill--${pill.tone}`, pill.text));
+  if (task.sourceApp) tags.append(el('span', 'crow__src', `from ${R.SOURCE_LABELS[task.sourceApp] || task.sourceApp}`));
+  main.append(tags);
+
+  const title = el('div', 'crow__title');
+  const href = companyLink(task);
+  title.append(href ? link(href, null, task.title, 'Open where this is done') : document.createTextNode(task.title));
+  main.append(title);
+  if (task.notes) main.append(el('div', 'crow__notes', task.notes));
+
+  const who = el('div', 'crow__who');
+  if (unclaimed) who.append(el('span', 'crow__unclaimed', 'Unclaimed'));
+  else {
+    const since = task.claimedAt ? ` · since ${R.shortDate(task.claimedAt)}` : '';
+    who.append(el('span', null, `${mine ? 'You have this' : `${holderName} has this`}${since}`));
+  }
+  if (requester) who.append(el('span', null, `asked by ${R.assigneeName(requester)}`));
+  if (dismissed) {
+    const by = dismisser ? ` — ${R.assigneeName(dismisser)}` : '';
+    const when = task.archivedAt ? ` · ${R.shortDate(task.archivedAt)}` : '';
+    const why = task.closedReason ? `: ${task.closedReason}` : '';
+    who.append(el('span', 'crow__dismissed', `Not needed${by}${when}${why}`));
+  }
+  main.append(who);
+  row.append(main);
+
+  if (state.isManager && !task._pending) {
+    const actions = el('div', 'crow__actions');
+    const button = (label, cls, title, onClick) => {
+      const b = el('button', `btn btn--small ${cls}`, label);
+      b.type = 'button';
+      if (title) b.title = title;
+      b.addEventListener('click', onClick);
+      return b;
+    };
+    const go = (type) => act({ type: `company:${type}`, id: task.id });
+    if (done) {
+      actions.append(button('Reopen', '', 'Marked done by mistake? Reopen it under your name', () => go('claim')));
+    } else if (!dismissed) {
+      actions.append(
+        button('Not needed', 'btn--amber', 'A mistake, the wrong job, overtaken by events — archive it with a reason', () =>
+          askWhyNotNeeded(task)
+        )
+      );
+      if (unclaimed) actions.append(button('I’ll take it', 'btn--primary', null, () => go('claim')));
+      else if (!mine) actions.append(button('Take over', '', `Take this over from ${holderName}`, () => go('claim')));
+      else actions.append(button('Release', '', null, () => go('release')));
+      actions.append(button('Done', 'btn--ok', null, () => go('done')));
+    }
+    if (actions.children.length) row.append(actions);
+  }
+  return row;
+}
+
+// "Not needed" asks why, in one line (the route needs a reason).
+function askWhyNotNeeded(task) {
+  ui.dialog = { kind: 'confirm' };
+  const box = el('div', 'dialog__box dialog__box--small');
+  box.append(el('h2', null, 'Not needed?'), el('p', 'pane__note', task.title));
+  const form = el('form');
+  const why = input('reason', '', { maxlength: '300', placeholder: 'Why is it not needed? (one line)', required: '' });
+  form.append(field('Reason', why));
+  const actions = el('div', 'dialog__actions');
+  const ok = el('button', 'btn btn--danger', 'Dismiss');
+  ok.type = 'submit';
+  const cancel = el('button', 'btn', 'Cancel');
+  cancel.type = 'button';
+  cancel.addEventListener('click', closeDialog);
+  actions.append(ok, cancel);
+  form.append(actions);
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const reason = why.value.trim();
+    if (!reason) return;
+    closeDialog();
+    act({ type: 'company:dismiss', id: task.id, reason });
+  });
+  box.append(form);
+  showDialog(box);
+  why.focus();
+}
+
+// ── Recurring Tasks ────────────────────────────────────────────────────────
+
+const REC_CHIPS = [
+  { key: 'overdue', label: 'Overdue' },
+  { key: 'due-today', label: 'Due Today' },
+  { key: 'due-soon', label: 'Due Soon' }
+];
+
+function renderRecurring() {
+  // Starts on "my recurring tasks", as the page does.
+  if (ui.recOwner === null && state.myEmployeeId) ui.recOwner = state.myEmployeeId;
+
+  const archived = ui.recArchived;
+  const source = archived ? state.archivedRecurring || [] : state.recurring || [];
+
+  const tog = $('toggle-archived-recurring');
+  tog.textContent = archived ? 'Showing Archived' : 'Active';
+  tog.classList.toggle('btn--on', archived);
+  $('add-recurring').disabled = !state.isAdmin;
+  $('rec-view-list').classList.toggle('seg__btn--on', ui.recView === 'list');
+  $('rec-view-cal').classList.toggle('seg__btn--on', ui.recView === 'calendar');
+
+  $('rec-chips').replaceChildren(
+    ...REC_CHIPS.map((c) => {
+      const b = el('button', `chip${ui.recFilter === c.key ? ' chip--on' : ''}`, c.label);
+      b.type = 'button';
+      b.addEventListener('click', () => {
+        ui.recFilter = ui.recFilter === c.key ? 'all' : c.key;
+        render();
+      });
+      return b;
+    })
+  );
+  const more = $('rec-more-filter');
+  more.value = ui.recFilter === 'on-track' ? 'on-track' : 'all';
+  more.classList.toggle('select--on', ui.recFilter === 'on-track');
+
+  const ownerSel = $('rec-owner-filter');
+  const ownerIds = [...new Set(source.map((t) => t.assigneeId))];
+  if (ui.recOwner && !ownerIds.includes(ui.recOwner)) ownerIds.push(ui.recOwner);
+  const owners = ownerIds
+    .map((id) => ({ id, name: id === state.myEmployeeId ? `${ownerName(id)} (me)` : ownerName(id) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const ownerKey = owners.map((o) => `${o.id}:${o.name}`).join('|');
+  if (ownerSel.dataset.key !== ownerKey) {
+    ownerSel.dataset.key = ownerKey;
+    ownerSel.replaceChildren(new Option('All Owners', ''), ...owners.map((o) => new Option(o.name, o.id)));
+  }
+  ownerSel.value = ui.recOwner || '';
+  ownerSel.classList.toggle('select--on', Boolean(ui.recOwner));
+
+  const list = $('recurring-list');
+  if (ui.recView === 'calendar') {
+    // The calendar shows them all, as the page's does.
+    list.replaceChildren(recurringCalendar(source));
+    return;
+  }
+  const shown = R.filterRecurring(source, { filter: ui.recFilter, owner: ui.recOwner || '' });
+  if (shown.length === 0) {
+    const what = state.status === 'idle' ? 'Loading…' : archived ? 'No archived recurring tasks' : 'No recurring tasks found';
+    list.replaceChildren(el('div', 'empty', what));
+    return;
+  }
+  const nodes = [];
+  for (const g of R.groupRecurring(shown)) {
+    nodes.push(el('div', 'group', `${g.label} · ${g.tasks.length} task${g.tasks.length === 1 ? '' : 's'}`));
+    const table = el('div', 'rtable');
+    const head = el('div', 'rrow rrow--head');
+    for (const h of ['Task', 'Owner', 'Frequency', 'Last Done', 'Next Due', 'Status', '']) head.append(el('div', null, h));
+    table.append(head, ...g.tasks.map(recurringRow));
+    nodes.push(table);
+  }
+  list.replaceChildren(...nodes);
+}
+
+function recurringRow(task) {
+  const st = R.recurringStatus(task);
+  const row = el('div', 'rrow');
+  if (st.tone !== 'done') row.classList.add(`rrow--${st.tone}`);
+  if (task._pending) row.classList.add('rrow--saving');
+  if (!task._pending) row.addEventListener('click', () => openRecurringForm(task));
+
+  const t = el('div');
+  t.append(el('div', 'rrow__title', task.title));
+  if (task.description) t.append(el('div', 'rrow__desc', task.description));
+  row.append(
+    t,
+    el('div', 'rrow__cell', ownerName(task.assigneeId)),
+    el('div', 'rrow__cell', R.frequencyLabel(task.frequencyType, task.frequencyValue)),
+    el('div', 'rrow__cell', task.lastCompleted ? R.shortDate(task.lastCompleted) : 'Never'),
+    el('div', `rrow__cell${st.tone === 'overdue' ? ' rrow__late' : ''}`, task.nextDue ? R.shortDate(task.nextDue) : 'Not set'),
+    el('span', `pill pill--${st.tone}`, st.text)
+  );
+  const actions = el('div', 'rrow__actions');
+  if (state.isAdmin && !task._pending) {
+    actions.append(
+      iconButton('check', 'Mark completed', () =>
+        confirmDialog({
+          title: 'Mark as Completed',
+          body: `Mark "${task.title}" as completed? This will advance the next due date.`,
+          okLabel: 'Complete',
+          onOk: () => act({ type: 'recurring:complete', id: task.id })
+        }),
+        'icon-btn--ok'
+      ),
+      task.isArchived
+        ? iconButton('restore', 'Restore', () => act({ type: 'recurring:restore', id: task.id }), 'icon-btn--ok')
+        : iconButton('archive', 'Archive', () =>
+            confirmDialog({
+              title: 'Archive recurring task?',
+              body: `"${task.title}" moves to the archive. You can restore it from there.`,
+              okLabel: 'Archive',
+              danger: true,
+              onOk: () => act({ type: 'recurring:archive', id: task.id })
+            }),
+            'icon-btn--bad'
+          )
+    );
+  }
+  row.append(actions);
+  return row;
+}
+
+function recurringCalendar(list) {
+  const now = new Date();
+  const at = ui.recMonth || { y: now.getFullYear(), m: now.getMonth() };
+  const box = el('div', 'cal');
+  const head = el('div', 'cal__head');
+  const move = (delta) => {
+    const d = new Date(at.y, at.m + delta, 1);
+    ui.recMonth = { y: d.getFullYear(), m: d.getMonth() };
+    render();
+  };
+  const prev = el('button', 'btn btn--small', '‹');
+  prev.type = 'button';
+  prev.addEventListener('click', () => move(-1));
+  const next = el('button', 'btn btn--small', '›');
+  next.type = 'button';
+  next.addEventListener('click', () => move(1));
+  const todayBtn = el('button', 'btn btn--small btn--primary', 'Today');
+  todayBtn.type = 'button';
+  todayBtn.addEventListener('click', () => {
+    ui.recMonth = null;
+    render();
+  });
+  head.append(
+    prev,
+    el('span', 'cal__month', new Date(at.y, at.m, 1).toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })),
+    next,
+    todayBtn
+  );
+  const grid = el('div', 'cal__grid');
+  for (const d of ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']) grid.append(el('div', 'cal__dow', d));
+  for (const day of R.calendarDays(list, at.y, at.m)) {
+    const cell = el('div', `cal__day${day.inMonth ? '' : ' cal__day--out'}${day.isToday ? ' cal__day--today' : ''}`);
+    cell.append(el('div', 'cal__num', String(day.date.getDate())));
+    for (const t of day.tasks) {
+      const tone = R.recurringStatus(t).tone;
+      const chip = el('div', `cal__task${tone === 'done' ? '' : ` cal__task--${tone}`}`, t.title);
+      chip.title = `${t.title} — ${ownerName(t.assigneeId)}`;
+      chip.addEventListener('click', () => openRecurringForm(t));
+      cell.append(chip);
+    }
+    grid.append(cell);
+  }
+  box.append(head, grid);
+  return box;
+}
+
+// Add / edit a recurring task — the page's fields, in its order.
+function openRecurringForm(task) {
+  const editing = Boolean(task && task.id);
+  const t = task || {};
+  ui.dialog = { kind: 'recurring' };
+
+  const box = el('div', 'dialog__box');
+  box.append(el('h2', null, editing ? 'Edit Recurring Task' : 'Add Recurring Task'));
+  const form = el('form');
+  const title = input('title', t.title, { required: '', maxlength: '300', placeholder: 'What recurring task needs tracking?' });
+  const people = [...(state.assignees || [])].sort((a, b) => R.assigneeName(a).localeCompare(R.assigneeName(b)));
+  const assignee = select(
+    'assigneeId',
+    [{ value: '', label: 'Choose…' }, ...people.map((a) => ({ value: a.id, label: R.assigneeName(a) }))],
+    t.assigneeId || state.myEmployeeId || ''
+  );
+  if (t.assigneeId && !people.some((a) => a.id === t.assigneeId)) {
+    assignee.append(new Option(t.assigneeId, t.assigneeId));
+    assignee.value = t.assigneeId;
+  }
+  const category = select('category', R.RECURRING_CATEGORY_OPTIONS, t.category || 'Task');
+  if (t.category && !R.RECURRING_CATEGORY_OPTIONS.some((o) => o.value === t.category)) {
+    category.append(new Option(t.category, t.category));
+    category.value = t.category;
+  }
+  const freq = select('frequencyType', R.FREQUENCY_OPTIONS, t.frequencyType || 'WEEKLY');
+  const every = input('frequencyValue', String(t.frequencyValue || 1), { type: 'number', min: '1' });
+  const schedule = select('scheduleType', R.SCHEDULE_OPTIONS, t.scheduleType || 'FLOATING');
+  const last = input('lastCompleted', R.isoDay(t.lastCompleted), { type: 'date' });
+  const desc = el('textarea');
+  desc.name = 'description';
+  desc.rows = 3;
+  desc.value = t.description || '';
+  desc.placeholder = 'Additional details…';
+
+  form.append(field('Task Title *', title));
+  const g1 = el('div', 'grid2');
+  g1.append(field('Assignee *', assignee), field('Category', category));
+  const g2 = el('div', 'grid3');
+  g2.append(field('Frequency', freq), field('Every', every), field('Schedule Type', schedule));
+  form.append(g1, g2, field('Last Completed', last), field('Description', desc));
+
+  const error = el('p', 'dialog__error');
+  error.hidden = true;
+  form.append(error);
+  const actions = el('div', 'dialog__actions');
+  const save = el('button', 'btn btn--primary', editing ? 'Save Changes' : 'Add Recurring Task');
+  save.type = 'submit';
+  const cancel = el('button', 'btn', 'Cancel');
+  cancel.type = 'button';
+  cancel.addEventListener('click', closeDialog);
+  actions.append(save, cancel);
+  form.append(actions);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!assignee.value) {
+      error.textContent = 'Please select an assignee';
+      error.hidden = false;
+      return;
+    }
+    const fields = {
+      title: title.value.trim(),
+      description: desc.value.trim() || null,
+      category: category.value || 'Task',
+      frequencyType: freq.value || 'WEEKLY',
+      frequencyValue: Math.max(1, parseInt(every.value || '1', 10) || 1),
+      scheduleType: schedule.value || 'FLOATING',
+      lastCompleted: last.value || null,
+      assigneeId: assignee.value
+    };
+    closeDialog();
+    const res = editing
+      ? await act({ type: 'recurring:update', id: t.id, fields })
+      : await act({ type: 'recurring:create', fields });
+    if (!res.ok) {
+      openRecurringForm(editing ? { ...t, ...fields } : fields);
+      const err = document.querySelector('.dialog__error');
+      if (err) {
+        err.textContent = res.error || 'That did not save';
+        err.hidden = false;
+      }
+    }
+  });
+
+  box.append(form);
+  showDialog(box);
+  title.focus();
+  title.select();
 }
 
 // ── Dialogs ────────────────────────────────────────────────────────────────
@@ -734,11 +1183,19 @@ async function flushNote(d, closing) {
 
 // ── Wiring ─────────────────────────────────────────────────────────────────
 
+// Ctrl+N: a new one of whatever the tab holds (the queue's tasks come from the
+// apps, so on ACOMS Tasks it's a Quick Task).
 function newThing() {
   if (!state || !state.isAdmin) return;
   if (ui.tab === 'notes') openNoteEditor(null);
-  else openTaskForm(null);
+  else if (ui.tab === 'recurring') openRecurringForm(null);
+  else {
+    if (ui.tab !== 'quick') setTab('quick');
+    openTaskForm(null);
+  }
 }
+
+const TABS = ['acoms', 'quick', 'recurring', 'notes'];
 
 function setTab(tab) {
   ui.tab = tab;
@@ -771,6 +1228,32 @@ $('toggle-archived-notes').addEventListener('click', () => {
   api.loadArchived('notes', ui.notesArchived);
   render();
 });
+$('toggle-done-company').addEventListener('click', () => {
+  ui.companyShowDone = !ui.companyShowDone;
+  render();
+});
+$('add-recurring').addEventListener('click', () => openRecurringForm(null));
+$('toggle-archived-recurring').addEventListener('click', () => {
+  ui.recArchived = !ui.recArchived;
+  api.loadArchived('recurring', ui.recArchived);
+  render();
+});
+$('rec-view-list').addEventListener('click', () => {
+  ui.recView = 'list';
+  render();
+});
+$('rec-view-cal').addEventListener('click', () => {
+  ui.recView = 'calendar';
+  render();
+});
+$('rec-more-filter').addEventListener('change', (e) => {
+  ui.recFilter = e.target.value;
+  render();
+});
+$('rec-owner-filter').addEventListener('change', (e) => {
+  ui.recOwner = e.target.value;
+  render();
+});
 $('dialog').addEventListener('mousedown', (e) => {
   if (e.target === $('dialog')) closeDialog();
 });
@@ -782,9 +1265,10 @@ document.addEventListener('keydown', (e) => {
   } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
     e.preventDefault();
     if (!ui.dialog) newThing();
-  } else if ((e.ctrlKey || e.metaKey) && (e.key === '1' || e.key === '2')) {
+  } else if ((e.ctrlKey || e.metaKey) && ['1', '2', '3', '4'].includes(e.key)) {
+    // Ctrl+1…4: the tabs, left to right.
     e.preventDefault();
-    setTab(e.key === '1' ? 'quick' : 'notes');
+    if (!ui.dialog) setTab(TABS[Number(e.key) - 1]);
   }
 });
 
@@ -795,7 +1279,7 @@ api.onCommand((command) => {
   } else if (command === 'new-note') {
     setTab('notes');
     if (!ui.dialog) openNoteEditor(null);
-  } else if (command === 'tab:notes' || command === 'tab:quick') {
+  } else if (command.startsWith('tab:') && TABS.includes(command.slice(4))) {
     setTab(command.slice(4));
   }
 });

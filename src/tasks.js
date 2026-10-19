@@ -56,7 +56,12 @@ let pending = 0;
 let assignees = [];
 let assigneesAt = 0;
 // Opened on demand (the "Archived" toggle), not polled.
-let archived = { quick: null, notes: null };
+let archived = { quick: null, notes: null, recurring: null };
+const ARCHIVE_PATHS = {
+  quick: '/api/tasks?archived=true',
+  notes: '/api/notes?archived=true',
+  recurring: '/api/recurring-tasks?archived=true'
+};
 
 let windowOpen = false;
 let windowFocused = false;
@@ -69,6 +74,11 @@ function isAdmin() {
   return Boolean(data.me && data.me.role === 'ADMIN');
 }
 
+// Claim / release / done on the ACOMS Tasks queue: ADMIN or MANAGER (the route's rule).
+function isManager() {
+  return Boolean(data.me && (data.me.role === 'ADMIN' || data.me.role === 'MANAGER'));
+}
+
 function snapshot() {
   return {
     status,
@@ -76,6 +86,7 @@ function snapshot() {
     actionError,
     me: view.me,
     isAdmin: isAdmin(),
+    isManager: isManager(),
     quick: view.quick,
     notes: view.notes,
     recurring: view.recurring,
@@ -83,10 +94,14 @@ function snapshot() {
     dismissed: view.dismissed,
     archivedQuick: archived.quick,
     archivedNotes: archived.notes,
+    archivedRecurring: archived.recurring,
     assignees,
     myEmployeeId: rules.myEmployeeId(assignees, view.me),
     jobLinkBase,
-    emailBase
+    emailBase,
+    // A company task's linkUrl can be Controller-relative (Job Creator's
+    // "/job-creator/<id>"); the window resolves it against this.
+    controllerBase: baseUrl
   };
 }
 
@@ -109,11 +124,16 @@ function onChanged(fn) {
   };
 }
 
-// Open Quick Tasks of mine that are overdue — the tray icon's red dot.
+// Overdue things of mine — Quick Tasks, Recurring Tasks and the company tasks
+// I've claimed — the tray icon's red dot.
 function overdueCount() {
   const mine = rules.myEmployeeId(assignees, data.me);
-  const list = (data.quick || []).filter((t) => !mine || t.assigneeId === mine);
-  return rules.taskBadges(list).overdue;
+  const own = (list) => (list || []).filter((t) => !mine || t.assigneeId === mine);
+  return (
+    rules.taskBadges(own(data.quick)).overdue +
+    rules.recurringBadges(own(data.recurring)).overdue +
+    (mine ? rules.taskBadges(own(data.company)).overdue : 0)
+  );
 }
 
 // ── Requests ───────────────────────────────────────────────────────────────
@@ -255,12 +275,25 @@ const ACTIONS = {
   'note:pin': (a) => ({ path: `/api/notes/${id(a.id)}/pin`, method: 'PUT' }),
   'note:archive': (a) => ({ path: `/api/notes/${id(a.id)}`, method: 'DELETE' }),
   'note:restore': (a) => ({ path: `/api/notes/${id(a.id)}/restore`, method: 'POST' }),
-  'note:delete': (a) => ({ path: `/api/notes/${id(a.id)}?hard=true`, method: 'DELETE' })
+  'note:delete': (a) => ({ path: `/api/notes/${id(a.id)}?hard=true`, method: 'DELETE' }),
+  // ACOMS Tasks: the queue's four person actions (company-action.ts). A 409
+  // means someone else moved it first; the re-read shows who.
+  'company:claim': (a) => ({ path: `/api/tasks/${id(a.id)}/claim`, method: 'POST' }),
+  'company:release': (a) => ({ path: `/api/tasks/${id(a.id)}/release`, method: 'POST' }),
+  'company:done': (a) => ({ path: `/api/tasks/${id(a.id)}/done`, method: 'POST' }),
+  'company:dismiss': (a) => ({ path: `/api/tasks/${id(a.id)}/dismiss`, method: 'POST', body: { reason: String(a.reason || '') } }),
+  'recurring:create': (a) => ({ path: '/api/recurring-tasks', method: 'POST', body: a.fields }),
+  'recurring:update': (a) => ({ path: `/api/recurring-tasks/${id(a.id)}`, method: 'PUT', body: a.fields }),
+  'recurring:complete': (a) => ({ path: `/api/recurring-tasks/${id(a.id)}/complete`, method: 'POST' }),
+  'recurring:archive': (a) => ({ path: `/api/recurring-tasks/${id(a.id)}`, method: 'DELETE' }),
+  'recurring:restore': (a) => ({ path: `/api/recurring-tasks/${id(a.id)}/restore`, method: 'POST' })
 };
 
 async function act(action) {
   const make = action && ACTIONS[action.type];
   if (!make) return { ok: false, error: 'Unknown action' };
+  // What a claim writes, so the row shows as mine at once.
+  if (action.type.startsWith('company:')) action.me = rules.myEmployeeId(assignees, data.me);
 
   pending += 1;
   actionError = '';
@@ -287,7 +320,7 @@ async function act(action) {
   // Whatever happened, re-read: the server is the truth. A change to an
   // archived item refreshes that list too.
   etag = null;
-  if (/restore|delete/.test(action.type) || archived.quick || archived.notes) refreshArchived();
+  if (/restore|delete/.test(action.type) || archived.quick || archived.notes || archived.recurring) refreshArchived();
   pollNow();
   emit();
   return res.ok ? { ok: true, data: res.data } : { ok: false, error: actionError };
@@ -297,23 +330,22 @@ function toArgs({ path, method, body }) {
   return [path, { method, body }];
 }
 
-// "Archived" toggles: kind 'quick' | 'notes'; null closes it.
+// "Archived" toggles: kind 'quick' | 'notes' | 'recurring'; open false closes it.
 async function loadArchived(kind, open = true) {
-  if (!['quick', 'notes'].includes(kind)) return;
+  if (!ARCHIVE_PATHS[kind]) return;
   if (!open) {
     archived = { ...archived, [kind]: null };
     emit();
     return;
   }
-  const res = await request(kind === 'quick' ? '/api/tasks?archived=true' : '/api/notes?archived=true');
+  const res = await request(ARCHIVE_PATHS[kind]);
   archived = { ...archived, [kind]: res.ok && Array.isArray(res.data) ? res.data : [] };
   if (!res.ok) actionError = res.message || 'Could not load the archive';
   emit();
 }
 
 function refreshArchived() {
-  if (archived.quick) loadArchived('quick');
-  if (archived.notes) loadArchived('notes');
+  for (const kind of Object.keys(ARCHIVE_PATHS)) if (archived[kind]) loadArchived(kind);
 }
 
 // The Project (WIP job) field's search — the page's own route.
