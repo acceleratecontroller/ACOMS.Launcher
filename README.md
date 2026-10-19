@@ -189,6 +189,32 @@ Links in a message are clickable, and a link to an ACOMS portal opens in that
 portal's window like any other cross-portal link — paste a job's address to
 point someone at it.
 
+## Tasks
+
+ACOMS.Controller's Task Manager as a window of the launcher's own, so it opens
+the moment you click it: a blue ✓ icon in the system tray, beside chat's. A red
+dot on it means tasks of yours are overdue (the count is in the tooltip);
+right-click for **New task…** and **New quick note…**.
+
+- **Quick Tasks** — the same list, filters and order as the `/tasks` page. Type
+  a task in the box at the top and press Enter to add it (yours, due tomorrow);
+  **+ Add Task** or Ctrl+N for the full form. Click a task to edit it; ✓
+  completes it. A task's job opens in WIP, its source email in ACOMS.Email.
+- **Quick Notes** — your own notes. They save as you type; a note left empty
+  is thrown away. ✓ on a note turns it into a task.
+
+Where it lives: nothing is stored on your computer. The tasks stay in
+Controller, so the page and the window always agree; the launcher reads them
+all in one call (`GET /api/tasks/sync`), checks every few seconds while the
+window is open (and once a minute otherwise, for the red dot), and sends each
+change through the same routes the page uses. A change shows straight away;
+if Controller refuses it, the list goes back and the window says why. Like
+chat, it rides your Controller sign-in — if it says **Sign in**, that is what
+it needs.
+
+Admins only for now: the tray icon appears once Controller says you are an
+admin, and no one else sees it. ACOMS Tasks and Recurring Tasks come next.
+
 ## Updates
 
 The launcher keeps itself current. It checks shortly after startup, every

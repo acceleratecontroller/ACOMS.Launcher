@@ -1,6 +1,6 @@
 {
   "name": "acoms-launcher",
-  "version": "1.0.36",
+  "version": "1.0.37",
   "description": "Desktop launcher for the ACOMS web portals — one Dock icon, a picker window, and a dedicated window per portal.",
   "main": "src/main.js",
   "author": "Accelerate Controller",
@@ -30,7 +30,8 @@
       "portals.json"
     ],
     "asarUnpack": [
-      "src/chat.ico"
+      "src/chat.ico",
+      "src/tasks.ico"
     ],
     "mac": {
       "category": "public.app-category.productivity",
