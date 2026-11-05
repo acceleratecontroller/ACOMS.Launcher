@@ -1072,48 +1072,77 @@ a.pill--job:hover {
   color: #111;
 }
 
-/* ACOMS Tasks: the two streams and the routine summary (Dion 2026-11-06). */
-.streams {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 10px;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+/* ACOMS Tasks: Routine as cards under the Critical list (Dion 2026-11-06). */
+.routine {
+  margin-top: 18px;
 }
 
-.stream {
-  margin-bottom: -1px;
-  padding: 6px 12px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: inherit;
-  font: inherit;
-  opacity: 0.65;
-  cursor: pointer;
-}
-
-.stream--on {
-  border-bottom-color: #4f46e5;
+.routine__title {
+  margin: 0 0 8px;
+  font-size: 13px;
   font-weight: 600;
-  opacity: 1;
 }
 
-.routine-strip {
-  margin-bottom: 10px;
+.routine__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.rcard {
+  display: flex;
+  flex-direction: column;
   padding: 8px 10px;
   border: 1px solid rgba(128, 128, 128, 0.3);
   border-radius: 8px;
-  font-size: 13px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.routine-strip__head {
+.rcard:hover {
+  border-color: #4f46e5;
+}
+
+.rcard__name {
+  font-size: 12px;
+  opacity: 0.75;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rcard__count {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.rcard__sub {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.rcard__sub--late {
+  color: #dc2626;
+  opacity: 1;
+}
+
+.routine__close {
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.area-head {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
-.routine-strip__open {
-  flex-shrink: 0;
+.area-head__back {
   padding: 0;
   border: 0;
   background: none;
@@ -1122,11 +1151,7 @@ a.pill--job:hover {
   cursor: pointer;
 }
 
-.routine-strip__item {
-  margin-top: 2px;
-  font-size: 12px;
-  opacity: 0.75;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+.area-head__name {
+  flex: 1;
+  font-weight: 600;
 }

@@ -305,3 +305,12 @@ test('recurring complete shows "done today" at once; the next due is left to the
     assert.strictEqual(r.routineHeadline(s), '2 overdue (1 over 30 days), 1 due in the next 14 days');
   });
 }
+
+test('routine cards: one per label, biggest first, new areas appear by themselves', () => {
+  const now = new Date(2026, 10, 6, 9, 0);
+  const task = (id, label, dueDate) => ({ id, title: id, label, stream: 'ROUTINE', dueDate, status: 'NOT_STARTED', isArchived: false, assigneeId: 'x' });
+  const company = [task('a', 'Plant & Fleet', '2026-01-01T00:00:00.000Z'), task('b', 'Plant & Fleet', '2026-12-01T00:00:00.000Z'), task('c', 'Brand New', null), task('d', 'ACOMS', null)];
+  assert.deepStrictEqual(R.routineAreas(company, now)[0], { name: 'Plant & Fleet', open: 2, overdue: 1 });
+  assert.deepStrictEqual(R.routineAreas(company, now).map((a) => a.name), ['Plant & Fleet', 'Brand New', 'Other']);
+  assert.deepStrictEqual(R.areaTasks(company, 'Plant & Fleet').map((t) => t.id), ['a', 'b']);
+});

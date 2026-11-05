@@ -281,6 +281,8 @@ const ACTIONS = {
   'company:claim': (a) => ({ path: `/api/tasks/${id(a.id)}/claim`, method: 'POST' }),
   'company:release': (a) => ({ path: `/api/tasks/${id(a.id)}/release`, method: 'POST' }),
   'company:done': (a) => ({ path: `/api/tasks/${id(a.id)}/done`, method: 'POST' }),
+  // Make critical / back to routine: one task, a one-off (Dion 2026-11-06).
+  'company:stream': (a) => ({ path: `/api/tasks/${id(a.id)}/stream`, method: 'POST', body: { stream: a.stream } }),
   'company:dismiss': (a) => ({ path: `/api/tasks/${id(a.id)}/dismiss`, method: 'POST', body: { reason: String(a.reason || '') } }),
   'recurring:create': (a) => ({ path: '/api/recurring-tasks', method: 'POST', body: a.fields }),
   'recurring:update': (a) => ({ path: `/api/recurring-tasks/${id(a.id)}`, method: 'PUT', body: a.fields }),

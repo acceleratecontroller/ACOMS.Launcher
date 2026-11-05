@@ -233,6 +233,31 @@
     return out;
   }
 
+  // Routine shows as one card per area; a task's label is its area, so a new
+  // area needs no change here (Controller modules/tasks/routine.ts).
+  const NOT_AN_AREA = new Set(['ACOMS', 'HSEQ', 'ISO', 'Task']);
+  const routineAreaName = (label) => (!label || NOT_AN_AREA.has(label) ? 'Other' : label);
+
+  function routineAreas(company, now = new Date()) {
+    const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    const byName = new Map();
+    for (const t of openRoutine(company)) {
+      const name = routineAreaName(t.label);
+      const area = byName.get(name) || { name, open: 0, overdue: 0 };
+      area.open++;
+      if (t.dueDate && Date.parse(String(t.dueDate).slice(0, 10)) < today) area.overdue++;
+      byName.set(name, area);
+    }
+    return [...byName.values()].sort((a, b) => b.open - a.open || a.name.localeCompare(b.name));
+  }
+
+  function areaTasks(company, area, { mineOnly = false, myId = null } = {}) {
+    return openRoutine(company)
+      .filter((t) => routineAreaName(t.label) === area)
+      .filter((t) => !mineOnly || (Boolean(myId) && t.assigneeId === myId))
+      .sort((a, b) => ((a.dueDate || '9999') < (b.dueDate || '9999') ? -1 : 1));
+  }
+
   function routineHeadline(s) {
     const parts = [];
     if (s.overdue) parts.push(`${s.overdue} overdue${s.stale ? ` (${s.stale} over ${ROUTINE_STALE_DAYS} days)` : ''}`);
@@ -464,6 +489,9 @@
       case 'company:release':
         s.company = patchList(s.company, action.id, { assigneeId: COMPANY_ASSIGNEE_ID, claimedAt: null });
         break;
+      case 'company:stream':
+        s.company = patchList(s.company, action.id, { stream: action.stream, streamPinned: action.stream === 'CRITICAL' });
+        break;
       case 'company:done':
         s.company = patchList(s.company, action.id, { status: 'COMPLETED', completedAt: new Date().toISOString() });
         break;
@@ -538,6 +566,9 @@
 
   const api = {
     openRoutine,
+    routineAreas,
+    routineAreaName,
+    areaTasks,
     openCritical,
     routineSummary,
     routineHeadline,

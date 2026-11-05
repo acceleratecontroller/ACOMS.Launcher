@@ -17,8 +17,10 @@ const ui = {
   notesArchived: false,
   // ACOMS Tasks: all | unclaimed | mine | dismissed, and whether done ones show.
   companyFilter: 'all',
-  // Critical opens by default (Dion 2026-11-06).
-  companyStream: 'CRITICAL',
+  // The open Routine card, if any (Dion 2026-11-06). None = the Critical list
+  // with the cards under it.
+  companyArea: null,
+  areaMineOnly: false,
   companyShowDone: false,
   // Recurring: its own filter / owner / archive, and list or calendar.
   recFilter: 'all',
@@ -457,45 +459,63 @@ const COMPANY_FILTERS = [
   { key: 'dismissed', label: () => `Not needed${state.dismissed && state.dismissed.length ? ` (${state.dismissed.length})` : ''}` }
 ];
 
-function renderStreams() {
-  const critical = R.openCritical(state.company).length;
-  const routine = R.openRoutine(state.company).length;
-  const tabs = [
-    { key: 'CRITICAL', label: `Critical${critical ? ` (${critical})` : ''}` },
-    { key: 'ROUTINE', label: `Routine${routine ? ` (${routine})` : ''}` }
-  ];
-  $('company-streams').replaceChildren(
-    ...tabs.map((t) => {
-      const b = el('button', `stream${ui.companyStream === t.key ? ' stream--on' : ''}`, t.label);
-      b.type = 'button';
-      b.addEventListener('click', () => {
-        ui.companyStream = t.key;
-        renderCompany();
-      });
-      return b;
-    })
-  );
-
-  const strip = $('routine-strip');
+function renderRoutineCards() {
+  const box = $('routine-cards');
+  const areas = R.routineAreas(state.company);
+  box.hidden = Boolean(ui.companyArea) || areas.length === 0;
+  if (box.hidden) return;
+  const total = R.openRoutine(state.company).length;
+  const grid = el('div', 'routine__grid');
+  for (const a of areas) {
+    const card = el('button', 'rcard');
+    card.type = 'button';
+    card.append(
+      el('span', 'rcard__name', a.name),
+      el('span', 'rcard__count', String(a.open)),
+      el('span', `rcard__sub${a.overdue ? ' rcard__sub--late' : ''}`, a.overdue ? `${a.overdue} overdue` : 'none overdue')
+    );
+    card.addEventListener('click', () => {
+      ui.companyArea = a.name;
+      ui.areaMineOnly = false;
+      renderCompany();
+    });
+    grid.append(card);
+  }
   const s = R.routineSummary(state.company);
-  strip.hidden = ui.companyStream !== 'CRITICAL' || s.open === 0;
-  if (strip.hidden) return;
-  const head = el('div', 'routine-strip__head');
-  head.append(el('span', null, `Routine: ${R.routineHeadline(s) || `${s.open} open, nothing overdue or close`}`));
-  const open = el('button', 'routine-strip__open', 'Open Routine');
-  open.type = 'button';
-  open.addEventListener('click', () => {
-    ui.companyStream = 'ROUTINE';
+  const when = (d) => (d === 0 ? 'today' : d === 1 ? 'tomorrow' : `in ${d} days`);
+  const parts = [el('h3', 'routine__title', `Routine (${total})`), grid];
+  if (s.closest.length) {
+    const more = s.dueSoon > s.closest.length ? ` · +${s.dueSoon - s.closest.length} more` : '';
+    parts.push(el('div', 'routine__close', `Close: ${s.closest.map((c) => `${when(c.days)}, ${c.title}`).join(' · ')}${more}`));
+  }
+  box.replaceChildren(...parts);
+}
+
+function renderAreaHead() {
+  const head = $('area-head');
+  head.hidden = !ui.companyArea;
+  $('company-toolbar').hidden = Boolean(ui.companyArea);
+  if (head.hidden) return;
+  const back = el('button', 'area-head__back', '\u2190 Back');
+  back.type = 'button';
+  back.addEventListener('click', () => {
+    ui.companyArea = null;
     renderCompany();
   });
-  head.append(open);
-  const when = (d) => (d === 0 ? 'today' : d === 1 ? 'tomorrow' : `in ${d} days`);
-  strip.replaceChildren(head, ...s.closest.map((c) => el('div', 'routine-strip__item', `${when(c.days)}: ${c.title}`)));
+  const mine = el('button', `chip${ui.areaMineOnly ? ' chip--on' : ''}`, 'Mine');
+  mine.type = 'button';
+  mine.addEventListener('click', () => {
+    ui.areaMineOnly = !ui.areaMineOnly;
+    renderCompany();
+  });
+  const count = R.areaTasks(state.company, ui.companyArea, { mineOnly: ui.areaMineOnly, myId: state.myEmployeeId }).length;
+  head.replaceChildren(back, el('span', 'area-head__name', `${ui.companyArea} (${count})`), mine);
 }
 
 function renderCompany() {
-  renderStreams();
-  const badges = R.companyBadges(state.company, state.myEmployeeId, ui.companyStream);
+  renderRoutineCards();
+  renderAreaHead();
+  const badges = R.companyBadges(state.company, state.myEmployeeId);
   $('company-chips').replaceChildren(
     ...COMPANY_FILTERS.map((f) => {
       const b = el('button', `chip${ui.companyFilter === f.key ? ' chip--on' : ''}`, f.label(badges));
@@ -513,10 +533,11 @@ function renderCompany() {
   $('company-note').hidden = state.status !== 'ok' || state.isManager;
 
   const list = $('company-list');
-  const shown = R.visibleCompany(state.company, state.dismissed, {
+  const shown = ui.companyArea
+    ? R.areaTasks(state.company, ui.companyArea, { mineOnly: ui.areaMineOnly, myId: state.myEmployeeId })
+    : R.visibleCompany(state.company, state.dismissed, {
     filter: ui.companyFilter,
     showDone: ui.companyShowDone,
-    stream: ui.companyStream,
     myId: state.myEmployeeId
   });
   if (shown.length === 0) {
@@ -610,6 +631,11 @@ function companyRow(task) {
           askWhyNotNeeded(task)
         )
       );
+      if (task.stream === 'ROUTINE') {
+        actions.append(button('Make critical', 'btn--amber', 'Move just this one task to Critical', () => act({ type: 'company:stream', id: task.id, stream: 'CRITICAL' })));
+      } else if (task.streamPinned) {
+        actions.append(button('Back to routine', '', 'Send it back to its Routine card', () => act({ type: 'company:stream', id: task.id, stream: 'ROUTINE' })));
+      }
       if (unclaimed) actions.append(button('I’ll take it', 'btn--primary', null, () => go('claim')));
       else if (!mine) actions.append(button('Take over', '', `Take this over from ${holderName}`, () => go('claim')));
       else actions.append(button('Release', '', null, () => go('release')));
