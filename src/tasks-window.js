@@ -17,6 +17,8 @@ const ui = {
   notesArchived: false,
   // ACOMS Tasks: all | unclaimed | mine | dismissed, and whether done ones show.
   companyFilter: 'all',
+  // Critical opens by default (Dion 2026-11-06).
+  companyStream: 'CRITICAL',
   companyShowDone: false,
   // Recurring: its own filter / owner / archive, and list or calendar.
   recFilter: 'all',
@@ -455,8 +457,45 @@ const COMPANY_FILTERS = [
   { key: 'dismissed', label: () => `Not needed${state.dismissed && state.dismissed.length ? ` (${state.dismissed.length})` : ''}` }
 ];
 
+function renderStreams() {
+  const critical = R.openCritical(state.company).length;
+  const routine = R.openRoutine(state.company).length;
+  const tabs = [
+    { key: 'CRITICAL', label: `Critical${critical ? ` (${critical})` : ''}` },
+    { key: 'ROUTINE', label: `Routine${routine ? ` (${routine})` : ''}` }
+  ];
+  $('company-streams').replaceChildren(
+    ...tabs.map((t) => {
+      const b = el('button', `stream${ui.companyStream === t.key ? ' stream--on' : ''}`, t.label);
+      b.type = 'button';
+      b.addEventListener('click', () => {
+        ui.companyStream = t.key;
+        renderCompany();
+      });
+      return b;
+    })
+  );
+
+  const strip = $('routine-strip');
+  const s = R.routineSummary(state.company);
+  strip.hidden = ui.companyStream !== 'CRITICAL' || s.open === 0;
+  if (strip.hidden) return;
+  const head = el('div', 'routine-strip__head');
+  head.append(el('span', null, `Routine: ${R.routineHeadline(s) || `${s.open} open, nothing overdue or close`}`));
+  const open = el('button', 'routine-strip__open', 'Open Routine');
+  open.type = 'button';
+  open.addEventListener('click', () => {
+    ui.companyStream = 'ROUTINE';
+    renderCompany();
+  });
+  head.append(open);
+  const when = (d) => (d === 0 ? 'today' : d === 1 ? 'tomorrow' : `in ${d} days`);
+  strip.replaceChildren(head, ...s.closest.map((c) => el('div', 'routine-strip__item', `${when(c.days)}: ${c.title}`)));
+}
+
 function renderCompany() {
-  const badges = R.companyBadges(state.company, state.myEmployeeId);
+  renderStreams();
+  const badges = R.companyBadges(state.company, state.myEmployeeId, ui.companyStream);
   $('company-chips').replaceChildren(
     ...COMPANY_FILTERS.map((f) => {
       const b = el('button', `chip${ui.companyFilter === f.key ? ' chip--on' : ''}`, f.label(badges));
@@ -477,6 +516,7 @@ function renderCompany() {
   const shown = R.visibleCompany(state.company, state.dismissed, {
     filter: ui.companyFilter,
     showDone: ui.companyShowDone,
+    stream: ui.companyStream,
     myId: state.myEmployeeId
   });
   if (shown.length === 0) {
