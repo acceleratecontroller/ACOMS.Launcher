@@ -43,7 +43,7 @@ let errorMessage = '';
 let actionError = '';
 
 let baseUrl = null;
-let syncPath = '/api/tasks/sync';
+let syncPath = '/api/tasks/sync?streams=1';
 let jobLinkBase = null;
 let emailBase = null;
 let etag = null;
@@ -125,14 +125,14 @@ function onChanged(fn) {
 }
 
 // Overdue things of mine — Quick Tasks, Recurring Tasks and the company tasks
-// I've claimed — the tray icon's red dot.
+// I've claimed — the tray icon's red dot. Critical only: routine work stays quiet.
 function overdueCount() {
   const mine = rules.myEmployeeId(assignees, data.me);
   const own = (list) => (list || []).filter((t) => !mine || t.assigneeId === mine);
   return (
     rules.taskBadges(own(data.quick)).overdue +
     rules.recurringBadges(own(data.recurring)).overdue +
-    (mine ? rules.taskBadges(own(data.company)).overdue : 0)
+    (mine ? rules.taskBadges(own(rules.openCritical(data.company))).overdue : 0)
   );
 }
 
@@ -281,6 +281,8 @@ const ACTIONS = {
   'company:claim': (a) => ({ path: `/api/tasks/${id(a.id)}/claim`, method: 'POST' }),
   'company:release': (a) => ({ path: `/api/tasks/${id(a.id)}/release`, method: 'POST' }),
   'company:done': (a) => ({ path: `/api/tasks/${id(a.id)}/done`, method: 'POST' }),
+  // Make critical / back to routine: one task, a one-off (Dion 2026-11-06).
+  'company:stream': (a) => ({ path: `/api/tasks/${id(a.id)}/stream`, method: 'POST', body: { stream: a.stream } }),
   'company:dismiss': (a) => ({ path: `/api/tasks/${id(a.id)}/dismiss`, method: 'POST', body: { reason: String(a.reason || '') } }),
   'recurring:create': (a) => ({ path: '/api/recurring-tasks', method: 'POST', body: a.fields }),
   'recurring:update': (a) => ({ path: `/api/recurring-tasks/${id(a.id)}`, method: 'PUT', body: a.fields }),

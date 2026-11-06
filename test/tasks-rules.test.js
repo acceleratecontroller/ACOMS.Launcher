@@ -270,3 +270,47 @@ test('recurring complete shows "done today" at once; the next due is left to the
   assert.strictEqual(after.recurring[0].nextDue, day(-1));
   assert.deepStrictEqual(R.applyOptimistic(s, { type: 'recurring:archive', id: 'r' }).recurring, []);
 });
+
+{
+  const r = R;
+  const now = new Date(2026, 10, 6, 9, 0);
+  const task = (id, stream, dueDate) => ({ id, title: id, stream, dueDate, status: 'NOT_STARTED', isArchived: false, assigneeId: 'acoms-company', createdAt: id });
+  const company = [
+    task('swms', 'CRITICAL', '2026-11-05T00:00:00.000Z'),
+    { ...task('old', undefined, null) },
+    task('report', 'ROUTINE', '2026-01-31T00:00:00.000Z'),
+    task('late', 'ROUTINE', '2026-10-31T00:00:00.000Z'),
+    task('near', 'ROUTINE', '2026-11-20T00:00:00.000Z'),
+    task('far', 'ROUTINE', '2026-11-21T00:00:00.000Z')
+  ];
+
+  test('streams: treats a task with no stream as critical', () => {
+    assert.deepStrictEqual(r.openCritical(company).map((t) => t.id), ['swms', 'old']);
+  });
+
+  test('streams: shows each stream only in its own view, routine soonest first', () => {
+    assert.deepStrictEqual(r.visibleCompany(company, [], { stream: 'ROUTINE' }).map((t) => t.id), ['report', 'late', 'near', 'far']);
+    assert.strictEqual(r.visibleCompany(company, [], {}).length, 2);
+  });
+
+  test('streams: counts badges per stream', () => {
+    assert.strictEqual(r.companyBadges(company, null).unclaimed, 2);
+    assert.strictEqual(r.companyBadges(company, null, 'ROUTINE').unclaimed, 4);
+  });
+
+  test('streams: summarises routine work', () => {
+    const s = r.routineSummary(company, now);
+    assert.deepStrictEqual([s.open, s.overdue, s.stale, s.dueSoon], [4, 2, 1, 1]);
+    assert.deepStrictEqual(s.closest.map((c) => c.id), ['near']);
+    assert.strictEqual(r.routineHeadline(s), '2 overdue (1 over 30 days), 1 due in the next 14 days');
+  });
+}
+
+test('routine cards: one per label, biggest first, new areas appear by themselves', () => {
+  const now = new Date(2026, 10, 6, 9, 0);
+  const task = (id, label, dueDate) => ({ id, title: id, label, stream: 'ROUTINE', dueDate, status: 'NOT_STARTED', isArchived: false, assigneeId: 'x' });
+  const company = [task('a', 'Plant & Fleet', '2026-01-01T00:00:00.000Z'), task('b', 'Plant & Fleet', '2026-12-01T00:00:00.000Z'), task('c', 'Brand New', null), task('d', 'ACOMS', null)];
+  assert.deepStrictEqual(R.routineAreas(company, now)[0], { name: 'Plant & Fleet', open: 2, overdue: 1 });
+  assert.deepStrictEqual(R.routineAreas(company, now).map((a) => a.name), ['Plant & Fleet', 'Brand New', 'Other']);
+  assert.deepStrictEqual(R.areaTasks(company, 'Plant & Fleet').map((t) => t.id), ['a', 'b']);
+});

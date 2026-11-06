@@ -197,8 +197,76 @@
     return p.tone === 'today' ? { text: 'Due today', tone: 'today' } : p;
   }
 
-  function companyBadges(company, myId) {
-    const open = (company || []).filter((t) => !t.isArchived && !done(t));
+  // Two streams (Dion 2026-11-06, Controller modules/tasks/routine.ts). A task
+  // with no stream is from a Controller that predates them: critical.
+  const streamOf = (t) => t.stream || 'CRITICAL';
+  const ROUTINE_SOON_DAYS = 14;
+  const ROUTINE_STALE_DAYS = 30;
+
+  function openRoutine(company) {
+    return (company || []).filter((t) => !t.isArchived && !done(t) && streamOf(t) === 'ROUTINE');
+  }
+
+  function openCritical(company) {
+    return (company || []).filter((t) => !t.isArchived && !done(t) && streamOf(t) === 'CRITICAL');
+  }
+
+  // The strip on the Critical view: what is overdue, what has sat too long, what is close.
+  function routineSummary(company, now = new Date()) {
+    const DAY = 86400000;
+    const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    const open = openRoutine(company);
+    const out = { open: open.length, overdue: 0, stale: 0, dueSoon: 0, closest: [] };
+    const upcoming = [];
+    for (const t of open) {
+      if (!t.dueDate) continue;
+      const days = Math.round((Date.parse(String(t.dueDate).slice(0, 10)) - today) / DAY);
+      if (days < 0) {
+        out.overdue++;
+        if (-days > ROUTINE_STALE_DAYS) out.stale++;
+      } else if (days <= ROUTINE_SOON_DAYS) {
+        out.dueSoon++;
+        upcoming.push({ id: t.id, title: t.title, days });
+      }
+    }
+    out.closest = upcoming.sort((a, b) => a.days - b.days).slice(0, 3);
+    return out;
+  }
+
+  // Routine shows as one card per area; a task's label is its area, so a new
+  // area needs no change here (Controller modules/tasks/routine.ts).
+  const NOT_AN_AREA = new Set(['ACOMS', 'HSEQ', 'ISO', 'Task']);
+  const routineAreaName = (label) => (!label || NOT_AN_AREA.has(label) ? 'Other' : label);
+
+  function routineAreas(company, now = new Date()) {
+    const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    const byName = new Map();
+    for (const t of openRoutine(company)) {
+      const name = routineAreaName(t.label);
+      const area = byName.get(name) || { name, open: 0, overdue: 0 };
+      area.open++;
+      if (t.dueDate && Date.parse(String(t.dueDate).slice(0, 10)) < today) area.overdue++;
+      byName.set(name, area);
+    }
+    return [...byName.values()].sort((a, b) => b.open - a.open || a.name.localeCompare(b.name));
+  }
+
+  function areaTasks(company, area, { mineOnly = false, myId = null } = {}) {
+    return openRoutine(company)
+      .filter((t) => routineAreaName(t.label) === area)
+      .filter((t) => !mineOnly || (Boolean(myId) && t.assigneeId === myId))
+      .sort((a, b) => ((a.dueDate || '9999') < (b.dueDate || '9999') ? -1 : 1));
+  }
+
+  function routineHeadline(s) {
+    const parts = [];
+    if (s.overdue) parts.push(`${s.overdue} overdue${s.stale ? ` (${s.stale} over ${ROUTINE_STALE_DAYS} days)` : ''}`);
+    if (s.dueSoon) parts.push(`${s.dueSoon} due in the next ${ROUTINE_SOON_DAYS} days`);
+    return parts.join(', ');
+  }
+
+  function companyBadges(company, myId, stream = 'CRITICAL') {
+    const open = (company || []).filter((t) => !t.isArchived && !done(t) && streamOf(t) === stream);
     return {
       unclaimed: open.filter(isUnclaimed).length,
       mine: myId ? open.filter((t) => t.assigneeId === myId).length : 0
@@ -207,17 +275,22 @@
 
   // filter: all | unclaimed | mine | dismissed. Unclaimed first (newest on
   // top), then claimed, then done when shown; "Not needed" newest dismissed first.
-  function visibleCompany(company, dismissed, { filter = 'all', showDone = false, myId = null } = {}) {
+  function visibleCompany(company, dismissed, { filter = 'all', showDone = false, myId = null, stream = 'CRITICAL' } = {}) {
     if (filter === 'dismissed') {
       return [...(dismissed || [])].sort((a, b) => ((b.archivedAt || '') > (a.archivedAt || '') ? 1 : -1));
     }
     const rank = (t) => (done(t) ? 2 : isUnclaimed(t) ? 0 : 1);
     return (company || [])
+      .filter((t) => streamOf(t) === stream)
       .filter((t) => showDone || !done(t))
       .filter((t) =>
         filter === 'unclaimed' ? isUnclaimed(t) : filter === 'mine' ? Boolean(myId) && t.assigneeId === myId : true
       )
-      .sort((a, b) => rank(a) - rank(b) || (b.createdAt > a.createdAt ? 1 : -1));
+      .sort((a, b) =>
+        stream === 'ROUTINE'
+          ? ((a.dueDate || '9999') < (b.dueDate || '9999') ? -1 : 1)
+          : rank(a) - rank(b) || (b.createdAt > a.createdAt ? 1 : -1)
+      );
   }
 
   // ── Recurring Tasks ────────────────────────────────────────────────────────
@@ -416,6 +489,9 @@
       case 'company:release':
         s.company = patchList(s.company, action.id, { assigneeId: COMPANY_ASSIGNEE_ID, claimedAt: null });
         break;
+      case 'company:stream':
+        s.company = patchList(s.company, action.id, { stream: action.stream, streamPinned: action.stream === 'CRITICAL' });
+        break;
       case 'company:done':
         s.company = patchList(s.company, action.id, { status: 'COMPLETED', completedAt: new Date().toISOString() });
         break;
@@ -489,6 +565,13 @@
   }
 
   const api = {
+    openRoutine,
+    routineAreas,
+    routineAreaName,
+    areaTasks,
+    openCritical,
+    routineSummary,
+    routineHeadline,
     STATUS_OPTIONS,
     PRIORITY_OPTIONS,
     statusLabel,

@@ -62,12 +62,14 @@
 
     <!-- ── ACOMS Tasks (the company queue) ─────────────────────────────── -->
     <section id="pane-acoms" class="pane" hidden>
-      <div class="toolbar">
+      <div id="area-head" class="area-head" hidden></div>
+      <div id="company-toolbar" class="toolbar">
         <div id="company-chips" class="chips"></div>
         <button id="toggle-done-company" class="chip" type="button">Show done</button>
       </div>
       <p id="company-note" class="pane__note" hidden>Only admins and managers can take a task from this list for now.</p>
       <div id="company-list" class="list"></div>
+      <div id="routine-cards" class="routine" hidden></div>
     </section>
 
     <!-- ── Recurring Tasks ─────────────────────────────────────────────── -->

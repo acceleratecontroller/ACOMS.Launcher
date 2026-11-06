@@ -1071,3 +1071,87 @@ a.pill--job:hover {
   background: #facc15;
   color: #111;
 }
+
+/* ACOMS Tasks: Routine as cards under the Critical list (Dion 2026-11-06). */
+.routine {
+  margin-top: 18px;
+}
+
+.routine__title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.routine__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.rcard {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rcard:hover {
+  border-color: #4f46e5;
+}
+
+.rcard__name {
+  font-size: 12px;
+  opacity: 0.75;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rcard__count {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.rcard__sub {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.rcard__sub--late {
+  color: #dc2626;
+  opacity: 1;
+}
+
+.routine__close {
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.area-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.area-head__back {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #4f46e5;
+  font: inherit;
+  cursor: pointer;
+}
+
+.area-head__name {
+  flex: 1;
+  font-weight: 600;
+}

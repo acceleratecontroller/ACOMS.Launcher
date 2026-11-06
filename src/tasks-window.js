@@ -17,6 +17,10 @@ const ui = {
   notesArchived: false,
   // ACOMS Tasks: all | unclaimed | mine | dismissed, and whether done ones show.
   companyFilter: 'all',
+  // The open Routine card, if any (Dion 2026-11-06). None = the Critical list
+  // with the cards under it.
+  companyArea: null,
+  areaMineOnly: false,
   companyShowDone: false,
   // Recurring: its own filter / owner / archive, and list or calendar.
   recFilter: 'all',
@@ -455,7 +459,62 @@ const COMPANY_FILTERS = [
   { key: 'dismissed', label: () => `Not needed${state.dismissed && state.dismissed.length ? ` (${state.dismissed.length})` : ''}` }
 ];
 
+function renderRoutineCards() {
+  const box = $('routine-cards');
+  const areas = R.routineAreas(state.company);
+  box.hidden = Boolean(ui.companyArea) || areas.length === 0;
+  if (box.hidden) return;
+  const total = R.openRoutine(state.company).length;
+  const grid = el('div', 'routine__grid');
+  for (const a of areas) {
+    const card = el('button', 'rcard');
+    card.type = 'button';
+    card.append(
+      el('span', 'rcard__name', a.name),
+      el('span', 'rcard__count', String(a.open)),
+      el('span', `rcard__sub${a.overdue ? ' rcard__sub--late' : ''}`, a.overdue ? `${a.overdue} overdue` : 'none overdue')
+    );
+    card.addEventListener('click', () => {
+      ui.companyArea = a.name;
+      ui.areaMineOnly = false;
+      renderCompany();
+    });
+    grid.append(card);
+  }
+  const s = R.routineSummary(state.company);
+  const when = (d) => (d === 0 ? 'today' : d === 1 ? 'tomorrow' : `in ${d} days`);
+  const parts = [el('h3', 'routine__title', `Routine (${total})`), grid];
+  if (s.closest.length) {
+    const more = s.dueSoon > s.closest.length ? ` · +${s.dueSoon - s.closest.length} more` : '';
+    parts.push(el('div', 'routine__close', `Close: ${s.closest.map((c) => `${when(c.days)}, ${c.title}`).join(' · ')}${more}`));
+  }
+  box.replaceChildren(...parts);
+}
+
+function renderAreaHead() {
+  const head = $('area-head');
+  head.hidden = !ui.companyArea;
+  $('company-toolbar').hidden = Boolean(ui.companyArea);
+  if (head.hidden) return;
+  const back = el('button', 'area-head__back', '\u2190 Back');
+  back.type = 'button';
+  back.addEventListener('click', () => {
+    ui.companyArea = null;
+    renderCompany();
+  });
+  const mine = el('button', `chip${ui.areaMineOnly ? ' chip--on' : ''}`, 'Mine');
+  mine.type = 'button';
+  mine.addEventListener('click', () => {
+    ui.areaMineOnly = !ui.areaMineOnly;
+    renderCompany();
+  });
+  const count = R.areaTasks(state.company, ui.companyArea, { mineOnly: ui.areaMineOnly, myId: state.myEmployeeId }).length;
+  head.replaceChildren(back, el('span', 'area-head__name', `${ui.companyArea} (${count})`), mine);
+}
+
 function renderCompany() {
+  renderRoutineCards();
+  renderAreaHead();
   const badges = R.companyBadges(state.company, state.myEmployeeId);
   $('company-chips').replaceChildren(
     ...COMPANY_FILTERS.map((f) => {
@@ -474,7 +533,9 @@ function renderCompany() {
   $('company-note').hidden = state.status !== 'ok' || state.isManager;
 
   const list = $('company-list');
-  const shown = R.visibleCompany(state.company, state.dismissed, {
+  const shown = ui.companyArea
+    ? R.areaTasks(state.company, ui.companyArea, { mineOnly: ui.areaMineOnly, myId: state.myEmployeeId })
+    : R.visibleCompany(state.company, state.dismissed, {
     filter: ui.companyFilter,
     showDone: ui.companyShowDone,
     myId: state.myEmployeeId
@@ -570,6 +631,11 @@ function companyRow(task) {
           askWhyNotNeeded(task)
         )
       );
+      if (task.stream === 'ROUTINE') {
+        actions.append(button('Make critical', 'btn--amber', 'Move just this one task to Critical', () => act({ type: 'company:stream', id: task.id, stream: 'CRITICAL' })));
+      } else if (task.streamPinned) {
+        actions.append(button('Back to routine', '', 'Send it back to its Routine card', () => act({ type: 'company:stream', id: task.id, stream: 'ROUTINE' })));
+      }
       if (unclaimed) actions.append(button('I’ll take it', 'btn--primary', null, () => go('claim')));
       else if (!mine) actions.append(button('Take over', '', `Take this over from ${holderName}`, () => go('claim')));
       else actions.append(button('Release', '', null, () => go('release')));
