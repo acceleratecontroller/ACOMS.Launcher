@@ -1193,7 +1193,14 @@ if (!gotLock) {
     });
     notifications.init({
       portals,
-      openPortalAt: (portalId, url) => openPortal(portalId, url)
+      openPortalAt: (portalId, url) => openPortal(portalId, url),
+      // The task reminder lands in the Tasks window on Re-plan (the overdue
+      // ones, one at a time) for the people who have that window.
+      openTaskReminder: (portalId) => {
+        if (!tasksConfig || tasksConfig.portal !== portalId || !tasks.isAdmin()) return false;
+        openTasks('replan');
+        return true;
+      }
     });
 
     // Chat: same session, same cookie. Its state goes to the chat window in
