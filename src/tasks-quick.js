@@ -316,6 +316,11 @@ function jobTagOf(task) {
   return { number, text: number || R.jobKey(task.projectId), full: task.projectId || number };
 }
 
+// "In progress", "Stuck", or "Waiting 13d" once Controller says since when.
+function statusText(task) {
+  return task.status === 'AWAITING_RESPONSE' ? R.waitingText(task) : SHORT_STATUS[task.status] || '';
+}
+
 function quickRow(task) {
   const done = task.status === 'COMPLETED';
   const tone = R.duePill(task).tone;
@@ -338,9 +343,11 @@ function quickRow(task) {
   main.append(title);
   const job = jobTagOf(task);
   if (job) {
-    const tag = el('span', 'qtag', job.text);
-    tag.title = job.full;
+    const stage = done ? null : R.jobStageOf(task, state.jobStages);
+    const tag = el('span', `qtag${stage && stage.closed ? ' qtag--closed' : ''}`, job.text);
+    tag.title = stage ? `${job.full}\n${stage.label} in WIP${stage.closed ? ': is this task still needed?' : ''}` : job.full;
     main.append(tag);
+    if (stage && stage.closed) main.append(el('span', 'qclosed', stage.label));
   }
   if (task.label && task.label !== 'Task') main.append(el('span', 'qtag qtag--label', task.label));
   const from = R.addedBy(task, state.assignees, state.me);
@@ -351,7 +358,10 @@ function quickRow(task) {
   }
 
   const status = el('span', 'qrow__status');
-  if (!done && SHORT_STATUS[task.status]) status.append(el('span', `qdot qdot--${task.status}`), el('span', null, SHORT_STATUS[task.status]));
+  if (!done && SHORT_STATUS[task.status]) {
+    status.append(el('span', `qdot qdot--${task.status}`), el('span', null, statusText(task)));
+    if (task.status === 'AWAITING_RESPONSE' && task.waitingSince) status.title = `Waiting since ${R.shortDate(task.waitingSince)}`;
+  }
 
   const owner = el('span', 'qrow__owner');
   if (task.assigneeId !== state.myEmployeeId) {
@@ -465,7 +475,7 @@ function weekCard(task, col) {
   const meta = [
     col.kind === 'day' ? '' : R.dueShort(task),
     job ? job.text : '',
-    SHORT_STATUS[task.status] || '',
+    statusText(task),
     task.assigneeId !== state.myEmployeeId ? ownerName(task.assigneeId) : ''
   ].filter(Boolean);
   const line = el('span', `qcard__meta${col.kind === 'overdue' ? ' qdue--overdue' : ''}`, meta.join(' · '));
@@ -531,7 +541,7 @@ function replanCard(queue) {
     why === 'overdue'
       ? `Due ${R.dueShort(task)}, ${plural(days, 'day')} late`
       : `No date, not touched for ${plural(days, 'day')}`;
-  const meta = [what, job ? job.text : '', SHORT_STATUS[task.status] || '', task.priority === 'HIGH' ? 'High priority' : ''].filter(Boolean);
+  const meta = [what, job ? job.text : '', statusText(task), task.priority === 'HIGH' ? 'High priority' : ''].filter(Boolean);
 
   wrap.append(el('div', 'qreplan__count', `${queue.length} to go`), el('div', 'qreplan__title', task.title));
   wrap.append(el('div', `qreplan__meta${why === 'overdue' ? ' qdue--overdue' : ''}`, meta.join(' · ')));
@@ -589,6 +599,7 @@ function renderPanel(source) {
     task.id, task.title, task.projectId, task.notes, task.label, task.dueDate, task.status, task.priority,
     task.assigneeId, Boolean(task._pending), Boolean(task.isArchived), state.isAdmin,
     (R.addedBy(task, state.assignees, state.me) || {}).name,
+    task.waitingSince, (R.jobStageOf(task, state.jobStages) || {}).stage,
     related.map((t) => [t.id, t.title, t.dueDate])
   ]);
   if (key === quick.panelKey) return;
@@ -705,6 +716,10 @@ function buildPanel(task, related) {
       )
     )
   );
+  const waited = R.waitingDays(task);
+  if (waited !== null) {
+    out.push(panelRow('Waiting', el('span', 'qpanel__text', `${plural(waited, 'day')}, since ${R.shortDate(task.waitingSince)}`)));
+  }
   out.push(panelRow('Priority', choice(R.PRIORITY_OPTIONS, task.priority || 'LOW', (v) => saveTask(task, { priority: v }), !editable)));
 
   // Job
@@ -724,6 +739,16 @@ function buildPanel(task, related) {
   const jobBits = [jobField];
   if (job && job.number && state.jobLinkBase) {
     jobBits.push(link(state.jobLinkBase + encodeURIComponent(job.number), 'qlink', `Open ${job.number} in WIP`));
+  }
+  const stage = R.jobStageOf(task, state.jobStages);
+  if (stage) {
+    jobBits.push(
+      el(
+        'span',
+        stage.closed && !done ? 'qpanel__stage qpanel__stage--closed' : 'qpanel__stage',
+        stage.closed && !done ? `${stage.label} in WIP. Is this task still needed?` : `${stage.label} in WIP`
+      )
+    );
   }
   out.push(panelRow('Job', ...jobBits));
 
