@@ -677,6 +677,28 @@
     return hit ? hit.id : null;
   }
 
+  // Who put the task there. A task records its creator, not each hand-over, so
+  // this is "added by": a person (the sign-in identity, matched to OS's staff
+  // list), or the app that raised it. null when it cannot be named.
+  const TASK_SOURCE_NAMES = {
+    'acoms-email': 'ACOMS Email',
+    'claude-terminal': 'Claude',
+    'acoms-wip': 'WIP',
+    'acoms-gis': 'GIS',
+    'acoms-os': 'OS',
+    'mail-intake': 'Requests inbox',
+    'acoms-controller': 'Controller'
+  };
+
+  function addedBy(task, assignees, me) {
+    const id = task && task.createdById;
+    if (!id) return null;
+    if (TASK_SOURCE_NAMES[id]) return { kind: 'app', name: TASK_SOURCE_NAMES[id] };
+    if (me && (id === me.id || id === me.identityId)) return { kind: 'me', name: 'You' };
+    const hit = (assignees || []).find((a) => a.identityId === id);
+    return hit ? { kind: 'person', name: assigneeName(hit) } : null;
+  }
+
   // ── Instant writes ─────────────────────────────────────────────────────────
   // A click shows on screen at once; the server's answer (the next sync) is
   // the truth. Each returns a NEW state object, the old one untouched, so a
@@ -871,6 +893,7 @@
     sortNotes,
     assigneeName,
     myEmployeeId,
+    addedBy,
     applyOptimistic,
     pollIntervalMs,
     sourceEmailUrl,

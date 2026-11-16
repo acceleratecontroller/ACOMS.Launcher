@@ -240,3 +240,17 @@ test('the add line still works with no parser loaded', () => {
   assert.strictEqual(p.dueDate, '2026-10-20');
   assert.strictEqual(p.dueFound, false);
 });
+
+test('addedBy names the person or the app that created a task', () => {
+  const staff = [
+    { id: 'e1', firstName: 'Dion', lastName: 'H', identityId: 'idn-dion' },
+    { id: 'e2', firstName: 'Jane', lastName: 'Doe', identityId: 'idn-jane' }
+  ];
+  const me = { id: 'idn-dion', identityId: 'idn-dion' };
+  assert.deepStrictEqual(R.addedBy({ createdById: 'idn-dion' }, staff, me), { kind: 'me', name: 'You' });
+  assert.deepStrictEqual(R.addedBy({ createdById: 'idn-jane' }, staff, me), { kind: 'person', name: 'Jane Doe' });
+  assert.deepStrictEqual(R.addedBy({ createdById: 'acoms-email' }, staff, me), { kind: 'app', name: 'ACOMS Email' });
+  // Someone not in the staff list, or a task with no creator: say nothing.
+  assert.strictEqual(R.addedBy({ createdById: 'idn-gone' }, staff, me), null);
+  assert.strictEqual(R.addedBy({}, staff, me), null);
+});
