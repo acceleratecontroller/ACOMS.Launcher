@@ -254,3 +254,32 @@ test('addedBy names the person or the app that created a task', () => {
   assert.strictEqual(R.addedBy({ createdById: 'idn-gone' }, staff, me), null);
   assert.strictEqual(R.addedBy({}, staff, me), null);
 });
+
+test('waitingText counts days from waitingSince, and says plain Waiting without it', () => {
+  const waiting = task({ status: 'AWAITING_RESPONSE', waitingSince: day(-13) });
+  assert.strictEqual(R.waitingDays(waiting, NOW), 13);
+  assert.strictEqual(R.waitingText(waiting, NOW), 'Waiting 13d');
+  assert.strictEqual(R.waitingText(task({ status: 'AWAITING_RESPONSE' }), NOW), 'Waiting');
+  assert.strictEqual(R.waitingText(task({ status: 'AWAITING_RESPONSE', waitingSince: day(0) }), NOW), 'Waiting');
+  // A stale date on a task that is no longer waiting is ignored.
+  assert.strictEqual(R.waitingDays(task({ status: 'IN_PROGRESS', waitingSince: day(-5) }), NOW), null);
+});
+
+test('job stages: which jobs to ask about, and which count as closed', () => {
+  const tasks = [
+    task({ projectId: 'A1209 · ref · name' }),
+    task({ projectId: 'A0634' }),
+    task({ projectId: 'A1209' }),
+    task({ projectId: 'A0001', status: 'COMPLETED' }),
+    task({ projectId: 'A0002', isArchived: true }),
+    task({ projectId: null })
+  ];
+  assert.deepStrictEqual(R.taskJobNumbers(tasks), ['A0634', 'A1209']);
+
+  const stages = { A1209: { stage: 'invoiced' }, A0634: { stage: 'field_complete' } };
+  assert.deepStrictEqual(R.jobStageOf(tasks[0], stages), { number: 'A1209', stage: 'invoiced', label: 'Invoiced', closed: true });
+  assert.deepStrictEqual(R.jobStageOf(tasks[1], stages), { number: 'A0634', stage: 'field_complete', label: 'Field complete', closed: false });
+  // Not known is not closed: nothing is shown.
+  assert.strictEqual(R.jobStageOf(task({ projectId: 'A7777' }), stages), null);
+  assert.strictEqual(R.jobStageOf(tasks[0], undefined), null);
+});

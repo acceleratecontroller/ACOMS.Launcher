@@ -677,6 +677,50 @@
     return hit ? hit.id : null;
   }
 
+  // "Waiting 13d": how long a task has sat in Awaiting Response. Controller
+  // stamps waitingSince when the status changes; a task without it (an older
+  // Controller) just says "Waiting".
+  function waitingDays(task, now) {
+    if (!task || task.status !== 'AWAITING_RESPONSE' || !task.waitingSince) return null;
+    return Math.max(0, daysBetween(task.waitingSince, now === undefined ? Date.now() : now));
+  }
+
+  function waitingText(task, now) {
+    const days = waitingDays(task, now);
+    return days ? `Waiting ${days}d` : 'Waiting';
+  }
+
+  // The job numbers the open tasks are tagged with: what the window asks
+  // Controller the WIP stage of.
+  function taskJobNumbers(tasks) {
+    const seen = new Set();
+    for (const t of tasks || []) {
+      if (t.isArchived || t.status === 'COMPLETED') continue;
+      const n = jobNumberOf(t.projectId);
+      if (n) seen.add(n);
+    }
+    return [...seen].sort();
+  }
+
+  // A task's job as WIP has it. `closed` is a job nothing more will happen on,
+  // so an open task against it is worth a second look. Field complete and
+  // as-built are NOT closed: chasing those is what many tasks are for.
+  // null when the stage is not known; unknown is never shown as closed.
+  const CLOSED_JOB_STAGES = ['invoiced', 'cancelled', 'quote_lost'];
+
+  function jobStageOf(task, stages) {
+    const n = task ? jobNumberOf(task.projectId) : null;
+    const hit = n && stages ? stages[n] : null;
+    if (!hit || !hit.stage) return null;
+    const words = String(hit.stage).replace(/_/g, ' ');
+    return {
+      number: n,
+      stage: hit.stage,
+      label: words.charAt(0).toUpperCase() + words.slice(1),
+      closed: CLOSED_JOB_STAGES.includes(hit.stage)
+    };
+  }
+
   // Who put the task there. A task records its creator, not each hand-over, so
   // this is "added by": a person (the sign-in identity, matched to OS's staff
   // list), or the app that raised it. null when it cannot be named.
@@ -894,6 +938,10 @@
     assigneeName,
     myEmployeeId,
     addedBy,
+    waitingDays,
+    waitingText,
+    taskJobNumbers,
+    jobStageOf,
     applyOptimistic,
     pollIntervalMs,
     sourceEmailUrl,

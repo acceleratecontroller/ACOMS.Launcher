@@ -30,6 +30,7 @@ const { jobLinkBaseFor } = require('./chat-links');
 const FIRST_POLL_DELAY_MS = 4 * 1000; // let the picker paint first
 const REQUEST_TIMEOUT_MS = 15 * 1000;
 const ASSIGNEES_EVERY_MS = 30 * 60 * 1000; // from ACOMS.OS, rarely changes
+const JOB_STAGES_EVERY_MS = 10 * 60 * 1000; // from ACOMS.WIP, one call per job
 
 // status:
 //   idle        — not polled yet
@@ -55,6 +56,11 @@ let view = data;
 let pending = 0;
 let assignees = [];
 let assigneesAt = 0;
+// The WIP stage of each job the open quick tasks are tagged with, by job
+// number. Empty on a Controller without the route: the window shows nothing.
+let jobStages = {};
+let jobStagesAt = 0;
+let jobStagesFor = '';
 // Opened on demand (the "Archived" toggle), not polled.
 let archived = { quick: null, notes: null, recurring: null };
 const ARCHIVE_PATHS = {
@@ -97,6 +103,7 @@ function snapshot() {
     archivedRecurring: archived.recurring,
     assignees,
     myEmployeeId: rules.myEmployeeId(assignees, view.me),
+    jobStages,
     jobLinkBase,
     emailBase,
     // A company task's linkUrl can be Controller-relative (Job Creator's
@@ -204,6 +211,27 @@ async function loadAssignees() {
   }
 }
 
+// Asked when the set of tagged jobs changes, and every ten minutes. Not
+// awaited by the poll: the list draws first and the stages arrive after.
+function jobStagesDue() {
+  const wanted = rules.taskJobNumbers(data.quick).join(',');
+  return wanted !== jobStagesFor || Date.now() - jobStagesAt > JOB_STAGES_EVERY_MS;
+}
+
+async function loadJobStages() {
+  const numbers = rules.taskJobNumbers(data.quick);
+  jobStagesFor = numbers.join(',');
+  jobStagesAt = Date.now();
+  if (numbers.length === 0) {
+    jobStages = {};
+    return;
+  }
+  const res = await request(`/api/tasks/job-stages?numbers=${encodeURIComponent(jobStagesFor)}`);
+  if (!res.ok || !res.data || typeof res.data.stages !== 'object' || res.data.stages === null) return;
+  jobStages = res.data.stages;
+  emit();
+}
+
 async function poll() {
   if (polling) {
     pollAgain = true;
@@ -227,7 +255,10 @@ async function poll() {
     errorMessage = '';
     // Nothing changed (304) and nothing to catch up on: say nothing, so an
     // idle window isn't redrawn every few seconds.
-    if (res.status === 304 && !firstOk && pending === 0 && Date.now() - assigneesAt <= ASSIGNEES_EVERY_MS) return;
+    if (res.status === 304 && !firstOk && pending === 0 && Date.now() - assigneesAt <= ASSIGNEES_EVERY_MS) {
+      if (jobStagesDue()) loadJobStages().catch(() => {});
+      return;
+    }
     if (res.status !== 304 && res.data) {
       data = {
         me: res.data.me || null,
@@ -244,6 +275,7 @@ async function poll() {
     if (pending === 0) view = data;
     if (firstOk || Date.now() - assigneesAt > ASSIGNEES_EVERY_MS) await loadAssignees();
     emit();
+    if (jobStagesDue()) loadJobStages().catch(() => {});
   } finally {
     polling = false;
     const again = pollAgain;

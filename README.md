@@ -222,6 +222,15 @@ yours: Quick Tasks, Recurring Tasks and the company tasks you've claimed.
   - Keys on a task: Up / Down walk the list (the side panel follows when it is
     open), Space completes it, T / M / W move it to today, tomorrow or next
     Monday, Esc closes the panel.
+  - Re-plan shows the whole task, every field the side panel has, and each
+    saves as it is changed. The task stays on screen while it is edited; a
+    re-plan button (or Next) moves on.
+  - "Waiting 13d" on a task in Awaiting Response, counted from the day its
+    status changed (Controller's `waitingSince`).
+  - The job's WIP stage in the panel; a task on an invoiced, cancelled or lost
+    job gets an amber tag on the line. Stages come from Controller's
+    `/api/tasks/job-stages`, asked when the tagged jobs change and every ten
+    minutes. A job WIP does not answer for shows nothing.
   - "Added by" in the panel, and "from <name>" on the line when someone else
     added it. It is who created the task (matched to OS's staff list by
     sign-in identity) or the app that raised it; hand-overs are not recorded.
