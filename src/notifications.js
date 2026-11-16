@@ -48,6 +48,9 @@ let portals = [];
 let timer = null;
 let listeners = [];
 let openPortalAt = null; // injected by main.js: (portalId, url) => void
+// Injected by main.js: (portalId) => true when the Tasks window took the
+// reminder (it opens on Re-plan); false leaves it to the portal's /tasks page.
+let openTaskReminder = null;
 
 function snapshot() {
   const out = {};
@@ -483,6 +486,7 @@ function fireTaskReminder(portal, result) {
     // A later reminder replaces an undealt-with one rather than stacking.
     key: `reminder:${portal.id}`,
     onClick: () => {
+      if (openTaskReminder && openTaskReminder(portal.id)) return;
       if (openPortalAt) openPortalAt(portal.id, target);
     }
   });
@@ -547,9 +551,10 @@ async function pollAll() {
   emit();
 }
 
-function init({ portals: list, intervalMs, openPortalAt: opener }) {
+function init({ portals: list, intervalMs, openPortalAt: opener, openTaskReminder: reminderOpener }) {
   portals = Array.isArray(list) ? list : [];
   openPortalAt = opener || null;
+  openTaskReminder = reminderOpener || null;
 
   for (const p of portals) {
     results.set(p.id, { portalId: p.id, state: p.summary ? 'idle' : 'off', badge: 0, items: [] });

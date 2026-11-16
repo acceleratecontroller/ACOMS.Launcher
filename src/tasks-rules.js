@@ -158,6 +158,254 @@
     };
   }
 
+  // ── Quick Tasks: the redesigned pane (Dion, 2026-11-16) ────────────────────
+  // "when i start to have too many tasks of which there are 40 there is no way
+  // to really get on top of them or find stuff easily". Buckets instead of a
+  // header per day, search, group by job or label, a week view, a re-plan
+  // queue, and a No date list that says when it is being forgotten.
+
+  const DAY_MS = 86400000;
+  // A task with no date not touched for longer than this counts as forgotten.
+  const FORGOTTEN_AFTER_DAYS = 7;
+  // An open task nobody has changed for longer than this is stale.
+  const STALE_AFTER_DAYS = 30;
+
+  function daysBetween(from, to) {
+    return Math.round((dateOnly(to) - dateOnly(from)) / DAY_MS);
+  }
+
+  function addDaysIso(n, now) {
+    const t = today(now);
+    t.setDate(t.getDate() + n);
+    return isoDay(t);
+  }
+
+  // The Monday after today (today excluded).
+  function nextMondayIso(now) {
+    const t = today(now);
+    t.setDate(t.getDate() + ((8 - t.getDay()) % 7 || 7));
+    return isoDay(t);
+  }
+
+  // overdue / today / week (the next 7 days) / later / none.
+  function bucketOf(task, now) {
+    if (!task.dueDate) return 'none';
+    if (isOverdue(task.dueDate, now)) return 'overdue';
+    if (isDueToday(task.dueDate, now)) return 'today';
+    if (isDueSoon(task.dueDate, now)) return 'week';
+    return 'later';
+  }
+
+  // Whole days since anyone last changed it (created, when never changed).
+  function daysUntouched(task, now) {
+    const at = task.updatedAt || task.createdAt;
+    return at ? Math.max(0, daysBetween(at, now === undefined ? Date.now() : now)) : 0;
+  }
+
+  function isForgotten(task, now) {
+    return !done(task) && !task.dueDate && daysUntouched(task, now) > FORGOTTEN_AFTER_DAYS;
+  }
+
+  function isStale(task, now) {
+    return !done(task) && daysUntouched(task, now) > STALE_AFTER_DAYS;
+  }
+
+  // Controller's taskJobKey (modules/tasks/job-filter.ts): the first " · "
+  // segment of Task.projectId, upper-cased — the A-number when there is one.
+  function jobKey(projectId) {
+    const s = String(projectId || '').trim();
+    if (!s) return '';
+    const first = s.split(' · ')[0].trim();
+    return (first || s).toUpperCase();
+  }
+
+  // Every word typed appears somewhere in the title, job, label or notes.
+  function matchesSearch(task, q) {
+    const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return true;
+    const hay = [task.title, task.projectId, task.label, task.notes].filter(Boolean).join(' ').toLowerCase();
+    return words.every((w) => hay.includes(w));
+  }
+
+  function quickFilter(tasks, { filter = 'all', owner = '', archived = false, q = '' } = {}, now) {
+    return (tasks || []).filter((t) => {
+      if (owner && t.assigneeId !== owner) return false;
+      if (!matchesSearch(t, q)) return false;
+      const open = !done(t);
+      switch (filter) {
+        case 'completed': return done(t);
+        case 'overdue': return open && bucketOf(t, now) === 'overdue';
+        case 'due-today': return open && bucketOf(t, now) === 'today';
+        case 'due-soon': return open && bucketOf(t, now) === 'week';
+        case 'waiting': return t.status === 'AWAITING_RESPONSE';
+        case 'stuck': return t.status === 'STUCK';
+        case 'high': return open && t.priority === 'HIGH';
+        case 'no-date': return open && !t.dueDate;
+        case 'stale': return isStale(t, now);
+        default: return archived ? true : open;
+      }
+    });
+  }
+
+  // The numbers on the filter chips, over one person's (or everyone's) tasks.
+  function quickCounts(tasks, now) {
+    const live = (tasks || []).filter((t) => !t.isArchived);
+    const open = live.filter((t) => !done(t));
+    const inBucket = (b) => open.filter((t) => bucketOf(t, now) === b).length;
+    return {
+      all: open.length,
+      overdue: inBucket('overdue'),
+      today: inBucket('today'),
+      soon: inBucket('week'),
+      waiting: open.filter((t) => t.status === 'AWAITING_RESPONSE').length,
+      stuck: open.filter((t) => t.status === 'STUCK').length,
+      high: open.filter((t) => t.priority === 'HIGH').length,
+      noDate: inBucket('none'),
+      noDateForgotten: open.filter((t) => isForgotten(t, now)).length,
+      stale: open.filter((t) => isStale(t, now)).length,
+      completed: live.length - open.length
+    };
+  }
+
+  // The due column of a row: Today / Tomorrow / Wed 18 / 3 Nov / No date.
+  function dueShort(task, now) {
+    if (!task.dueDate) return 'No date';
+    const d = dateOnly(task.dueDate);
+    const diff = daysBetween(today(now), d);
+    if (diff === 0) return 'Today';
+    if (diff === 1) return 'Tomorrow';
+    if (diff > 1 && diff <= 7) return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric' });
+    const sameYear = d.getFullYear() === today(now).getFullYear();
+    return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: '2-digit' }) });
+  }
+
+  const PRIORITY_RANK = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+
+  function byDueThenPriority(a, b) {
+    if (a.dueDate && b.dueDate) {
+      const diff = dateOnly(a.dueDate) - dateOnly(b.dueDate);
+      if (diff) return diff;
+    } else if (a.dueDate || b.dueDate) {
+      return a.dueDate ? -1 : 1;
+    }
+    const pr = (PRIORITY_RANK[a.priority] ?? 2) - (PRIORITY_RANK[b.priority] ?? 2);
+    return pr || String(a.title).localeCompare(String(b.title));
+  }
+
+  const BUCKETS = [
+    { key: 'overdue', label: 'Overdue' },
+    { key: 'today', label: 'Today' },
+    { key: 'week', label: 'Next 7 days' },
+    { key: 'later', label: 'Later' },
+    { key: 'none', label: 'No date' }
+  ];
+
+  // The list's groups: by 'due' (the five buckets), 'job' or 'label'. Each is
+  // { key, label, tasks, forgotten } — forgotten counts undated tasks nobody
+  // has touched in over a week. Empty groups are left out.
+  function groupQuick(tasks, by = 'due', now) {
+    const list = tasks || [];
+    const make = (key, label, items) => ({
+      key,
+      label,
+      tasks: items,
+      forgotten: items.filter((t) => isForgotten(t, now)).length
+    });
+    if (by === 'job' || by === 'label') {
+      const keyOf = by === 'job' ? (t) => jobKey(t.projectId) : (t) => (t.label && t.label.trim()) || 'Task';
+      const keys = [...new Set(list.map(keyOf))].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)));
+      return keys.map((k) => make(k, k || 'No job', list.filter((t) => keyOf(t) === k).sort(byDueThenPriority)));
+    }
+    return BUCKETS.map((b) => {
+      const items = list.filter((t) => bucketOf(t, now) === b.key);
+      // Undated: the longest-ignored first, so the top of the list is what to look at.
+      if (b.key === 'none') items.sort((x, y) => daysUntouched(y, now) - daysUntouched(x, now));
+      else items.sort(byDueThenPriority);
+      return make(b.key, b.label, items);
+    }).filter((g) => g.tasks.length > 0);
+  }
+
+  // The week view: Overdue, today and the next four weekdays, then Later
+  // (everything else, undated included). A day column carries its date, which
+  // is what dropping a task on it sets.
+  function weekColumns(tasks, now) {
+    const list = tasks || [];
+    const days = [];
+    const d = today(now);
+    while (days.length < 5) {
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      if (days.length === 0 || !isWeekend) days.push(isoDay(d));
+      d.setDate(d.getDate() + 1);
+    }
+    const dayOf = (t) => (t.dueDate ? isoDay(t.dueDate) : '');
+    const cols = [
+      { key: 'overdue', kind: 'overdue', label: 'Overdue', iso: null, tasks: list.filter((t) => bucketOf(t, now) === 'overdue').sort(byDueThenPriority) }
+    ];
+    days.forEach((iso, i) => {
+      const date = dateOnly(`${iso}T00:00:00`);
+      cols.push({
+        key: iso,
+        kind: 'day',
+        iso,
+        isToday: i === 0,
+        label: date.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric' }),
+        tasks: list.filter((t) => dayOf(t) === iso).sort(byDueThenPriority)
+      });
+    });
+    cols.push({
+      key: 'later',
+      kind: 'later',
+      label: 'Later',
+      iso: null,
+      tasks: list.filter((t) => bucketOf(t, now) !== 'overdue' && !days.includes(dayOf(t))).sort(byDueThenPriority)
+    });
+    return cols;
+  }
+
+  // What "Re-plan" walks through, one at a time: every overdue task, oldest
+  // first, then the undated ones nobody has looked at in over a week. Each is
+  // { task, why: 'overdue' | 'undated', days }.
+  function replanQueue(tasks, now, skipped = {}) {
+    const open = (tasks || []).filter((t) => !done(t) && !t.isArchived && !t._pending && !skipped[t.id]);
+    const overdue = open
+      .filter((t) => bucketOf(t, now) === 'overdue')
+      .sort(byDueThenPriority)
+      .map((t) => ({ task: t, why: 'overdue', days: daysBetween(t.dueDate, today(now)) }));
+    const undated = open
+      .filter((t) => isForgotten(t, now))
+      .sort((a, b) => daysUntouched(b, now) - daysUntouched(a, now))
+      .map((t) => ({ task: t, why: 'undated', days: daysUntouched(t, now) }));
+    return [...overdue, ...undated];
+  }
+
+  // The add line: "ring Bob fri A1209 !" -> due Friday, job A1209, high
+  // priority. The date, job and label come from chat's parser (parseTask in
+  // chat-task-parse.js), so both read a date the same way. The title stays as
+  // typed, less a standalone "!" — nothing typed is ever dropped. With no date
+  // in it, the task is due tomorrow (Dion 2026-11-16: "by default jobs should
+  // go in with a due date of tomorrow but with an easy option to change").
+  function parseQuickAdd(text, { now, labels = [], parseTask } = {}) {
+    let title = String(text || '').trim();
+    let priority = 'LOW';
+    const bang = /(^|\s)!{1,3}(?=\s|$)/;
+    if (bang.test(title)) {
+      priority = 'HIGH';
+      title = title.replace(bang, ' ').replace(/\s+/g, ' ').trim();
+    } else if (/\b(urgent|asap)\b/i.test(title)) {
+      priority = 'HIGH';
+    }
+    const at = now === undefined ? new Date() : new Date(now);
+    const found = parseTask ? parseTask(title, at, labels) : null;
+    return {
+      title,
+      dueDate: (found && found.dueDate) || tomorrowIso(now),
+      dueFound: Boolean(found && found.dueDate),
+      job: (found && found.job) || null,
+      label: (found && found.label) || null,
+      priority
+    };
+  }
+
   // ── ACOMS Tasks (the company queue) ────────────────────────────────────────
   // CompanyTaskRow.tsx + the page's companyBadges / visibleCompanyTasks.
 
@@ -586,6 +834,24 @@
     groupTasks,
     duePill,
     taskBadges,
+    FORGOTTEN_AFTER_DAYS,
+    STALE_AFTER_DAYS,
+    daysBetween,
+    addDaysIso,
+    nextMondayIso,
+    bucketOf,
+    daysUntouched,
+    isForgotten,
+    isStale,
+    jobKey,
+    matchesSearch,
+    quickFilter,
+    quickCounts,
+    dueShort,
+    groupQuick,
+    weekColumns,
+    replanQueue,
+    parseQuickAdd,
     COMPANY_ASSIGNEE_ID,
     CATEGORY_LABELS,
     SOURCE_LABELS,

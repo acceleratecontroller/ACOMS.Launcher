@@ -197,10 +197,30 @@ dot on it means tasks of yours are overdue (the count is in the tooltip);
 right-click for **New task…** and **New quick note…**. The dot counts what's
 yours: Quick Tasks, Recurring Tasks and the company tasks you've claimed.
 
-- **Quick Tasks** — the same list, filters and order as the `/tasks` page. Type
-  a task in the box at the top and press Enter to add it (yours, due tomorrow);
-  **+ Add Task** or Ctrl+N for the full form. Click a task to edit it; ✓
-  completes it. A task's job opens in WIP, its source email in ACOMS.Email.
+- **Quick Tasks** — one line per task, in five groups: Overdue, Today, Next 7
+  days, Later, No date (the last two start folded). The list can also be
+  grouped by job or by label.
+  - **Adding**: type in the box at the top and press Enter. It is yours and due
+    tomorrow unless you say otherwise: `ring Bob friday A1209 !` is due Friday,
+    tagged to A1209 and high priority (dates are read the way chat reads them;
+    a line under the box shows what it understood). **Full form** or Ctrl+N
+    for every field.
+  - **Finding**: Ctrl+F searches title, job, label and notes. The filters carry
+    counts. **No date** turns red when an undated task has not been touched
+    for over a week; **Stale** is anything open and unchanged for 30 days.
+  - **A task**: click it and it opens in a panel at the side. Changes save as
+    you make them: one-click dates (Today, Tomorrow, Next Monday, In 2 weeks,
+    No date), progress, priority, job, label, owner, notes. It also lists the
+    other open tasks on the same job. The job opens in WIP, the source email
+    in ACOMS.Email.
+  - **Week**: Overdue, today and the next four weekdays, then Later. Drag a
+    task onto a day to give it that date.
+  - **Re-plan**: the overdue tasks (then undated ones not looked at in a
+    week), one at a time, oldest first, each dealt with in one key: Done,
+    Today, Tomorrow, Next Monday, Waiting, No date, Not needed. Clicking the
+    task reminder opens here.
+  - Keys on a task: Space completes it, T / M / W move it to today, tomorrow
+    or next Monday, Esc closes the panel.
 - **ACOMS Tasks** — the company queue the apps raise (job approvals, GIS
   views, the requests inbox…): **I'll take it**, **Release**, **Done**, **Not
   needed** (with a reason), **Reopen**. The title opens where the work is done;

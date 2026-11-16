@@ -137,33 +137,6 @@ function restoreTask(task) {
   act({ type: 'task:restore', id: task.id });
 }
 
-// "Type a task and press Enter": yours, due tomorrow, low priority — the full
-// form's own defaults. Without knowing which employee you are it can't assign
-// it, so the full form opens instead.
-async function quickAdd(title) {
-  const text = title.trim();
-  if (!text) return;
-  if (!state.myEmployeeId) {
-    openTaskForm({ title: text });
-    return;
-  }
-  const fields = {
-    title: text,
-    projectId: null,
-    notes: null,
-    label: 'Task',
-    dueDate: R.tomorrowIso(),
-    status: 'NOT_STARTED',
-    priority: 'LOW',
-    assigneeId: state.myEmployeeId
-  };
-  $('quick-add-input').value = '';
-  const res = await act({ type: 'task:create', fields });
-  if (!res.ok) {
-    $('quick-add-input').value = text; // nothing lost
-  }
-}
-
 // ── Rendering ──────────────────────────────────────────────────────────────
 
 function render() {
@@ -171,7 +144,9 @@ function render() {
   renderTop();
   renderNotice();
   renderCompany();
-  renderQuick();
+  // The Quick Tasks pane is tasks-quick.js, loaded after this file: a state
+  // that arrives before it has loaded is drawn when it has (its last line).
+  if (typeof renderQuick === 'function') renderQuick();
   renderRecurring();
   renderNotes();
 }
@@ -248,129 +223,6 @@ function renderNotice() {
   }
 }
 
-const CHIPS = [
-  { key: 'overdue', label: 'Overdue' },
-  { key: 'due-today', label: 'Due Today' },
-  { key: 'due-soon', label: 'Due Soon' }
-];
-
-function renderQuick() {
-  // The owner filter starts on "my tasks", as the page does.
-  if (ui.owner === null && state.myEmployeeId) ui.owner = state.myEmployeeId;
-
-  const archived = ui.archived;
-  const source = archived ? state.archivedQuick || [] : state.quick || [];
-
-  const tog = $('toggle-archived');
-  tog.textContent = archived ? 'Showing Archived' : 'Active';
-  tog.classList.toggle('btn--on', archived);
-
-  $('chips').replaceChildren(
-    ...CHIPS.map((c) => {
-      const b = el('button', `chip${ui.filter === c.key ? ' chip--on' : ''}`, c.label);
-      b.type = 'button';
-      b.addEventListener('click', () => {
-        ui.filter = ui.filter === c.key ? 'all' : c.key;
-        render();
-      });
-      return b;
-    })
-  );
-  const more = $('more-filter');
-  more.value = ['all', 'pending', 'completed', 'high'].includes(ui.filter) ? ui.filter : 'all';
-  more.classList.toggle('select--on', ['pending', 'completed', 'high'].includes(ui.filter));
-
-  const ownerSel = $('owner-filter');
-  const ownerIds = [...new Set(source.map((t) => t.assigneeId))];
-  if (ui.owner && !ownerIds.includes(ui.owner)) ownerIds.push(ui.owner);
-  const owners = ownerIds
-    .map((id) => ({ id, name: id === state.myEmployeeId ? `${ownerName(id)} (me)` : ownerName(id) }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  // Rebuilt only when the people change, so a refresh never snaps shut a
-  // dropdown that is open.
-  const ownerKey = owners.map((o) => `${o.id}:${o.name}`).join('|');
-  if (ownerSel.dataset.key !== ownerKey) {
-    ownerSel.dataset.key = ownerKey;
-    ownerSel.replaceChildren(new Option('All Owners', ''), ...owners.map((o) => new Option(o.name, o.id)));
-  }
-  ownerSel.value = ui.owner || '';
-  ownerSel.classList.toggle('select--on', Boolean(ui.owner));
-
-  $('add-task').disabled = !state.isAdmin;
-  $('quick-add-input').disabled = !state.isAdmin;
-
-  const list = $('task-list');
-  const shown = R.filterTasks(source, { filter: ui.filter, owner: ui.owner || '', archived });
-  if (shown.length === 0) {
-    const what = state.status === 'idle' ? 'Loading…' : archived ? 'No archived tasks here' : 'No tasks found';
-    list.replaceChildren(el('div', 'empty', what));
-    return;
-  }
-  const nodes = [];
-  for (const g of R.groupTasks(shown)) {
-    nodes.push(el('div', 'group', `${g.label} · ${g.tasks.length} task${g.tasks.length === 1 ? '' : 's'}`));
-    for (const t of g.tasks) nodes.push(taskRow(t));
-  }
-  list.replaceChildren(...nodes);
-}
-
-function taskRow(task) {
-  const done = task.status === 'COMPLETED';
-  const pill = R.duePill(task);
-  const row = el('div', `row row--${task.priority || 'LOW'}`);
-  if (!done && pill.tone === 'overdue') row.classList.add('row--overdue');
-  if (!done && pill.tone === 'today') row.classList.add('row--today');
-  if (done) row.classList.add('row--done');
-  if (task._pending) row.classList.add('row--saving');
-  if (!task._pending) row.addEventListener('click', () => openTaskForm(task));
-
-  const main = el('div', 'row__main');
-  const line = el('div', 'row__line');
-  const title = el('span', 'row__title', task.title);
-  title.title = task.title;
-  line.append(title);
-  if (task.label && task.label !== 'Task') line.append(el('span', 'pill', task.label));
-  // The job it's tagged with opens in WIP's window (Dion: "job look ups etc
-  // ... would all have to work as well").
-  const job = R.jobNumberOf(task.projectId) || (!task.projectId && R.jobNumberOf(task.title));
-  if (task.projectId || job) {
-    const text = task.projectId || job;
-    line.append(
-      job && state.jobLinkBase
-        ? link(state.jobLinkBase + encodeURIComponent(job), 'pill pill--job', text, `Open ${job} in WIP`)
-        : el('span', 'pill pill--job', text)
-    );
-  }
-  main.append(line);
-  if (task.notes) main.append(el('p', 'row__notes', task.notes));
-  row.append(main);
-
-  if (task.status !== 'NOT_STARTED' && !done) row.append(el('span', `pill pill--${task.status}`, R.statusLabel(task.status)));
-  if (task.priority === 'MEDIUM' || task.priority === 'HIGH') row.append(el('span', `pill pill--${task.priority}`, task.priority));
-  row.append(el('span', `pill pill--due pill--${pill.tone}`, pill.text));
-
-  const owner = ownerName(task.assigneeId);
-  const av = el('span', 'avatar', initials(owner));
-  av.title = owner;
-  row.append(av);
-
-  const email = R.sourceEmailUrl(task, state.emailBase);
-  if (email) {
-    const a = link(email, 'icon-btn', null, 'View source email in ACOMS.Email');
-    a.append(icon('mail'));
-    row.append(a);
-  }
-
-  if (state.isAdmin && !task._pending) {
-    row.append(
-      iconButton(done ? 'undo' : 'check', done ? 'Undo complete' : 'Complete', () => complete(task), 'icon-btn--ok'),
-      task.isArchived
-        ? iconButton('restore', 'Restore', () => restoreTask(task), 'icon-btn--ok')
-        : iconButton('archive', 'Archive', () => archiveTask(task), 'icon-btn--bad')
-    );
-  }
-  return row;
-}
 
 function noteDate(value) {
   return new Date(value).toLocaleString('en-AU', {
@@ -1270,16 +1122,8 @@ function setTab(tab) {
 
 for (const b of document.querySelectorAll('.tab')) b.addEventListener('click', () => setTab(b.dataset.tab));
 
-$('quick-add').addEventListener('submit', (e) => {
-  e.preventDefault();
-  quickAdd($('quick-add-input').value);
-});
 $('add-task').addEventListener('click', () => openTaskForm(null));
 $('add-note').addEventListener('click', () => openNoteEditor(null));
-$('more-filter').addEventListener('change', (e) => {
-  ui.filter = e.target.value;
-  render();
-});
 $('owner-filter').addEventListener('change', (e) => {
   ui.owner = e.target.value;
   render();

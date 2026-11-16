@@ -34,30 +34,48 @@
     <div id="action-error" class="action-error" hidden></div>
 
     <!-- ── Quick Tasks ─────────────────────────────────────────────────── -->
-    <section id="pane-quick" class="pane">
-      <form id="quick-add" class="quick-add">
-        <input
-          id="quick-add-input"
-          class="quick-add__input"
-          type="text"
-          maxlength="300"
-          autocomplete="off"
-          placeholder="Type a task and press Enter (yours, due tomorrow) — Ctrl+N for the full form"
-        />
-        <button class="btn btn--primary" type="button" id="add-task">+ Add Task</button>
-      </form>
-      <div class="toolbar">
-        <button id="toggle-archived" class="btn btn--ghost" type="button">Active</button>
-        <div id="chips" class="chips"></div>
-        <select id="more-filter" class="select" aria-label="More filters">
-          <option value="all">All Tasks</option>
-          <option value="pending">Pending</option>
-          <option value="completed">Completed</option>
-          <option value="high">High Priority</option>
+    <section id="pane-quick" class="pane pane--quick">
+      <div class="qbar">
+        <form id="quick-add" class="qfield qfield--add">
+          <svg class="qfield__icon" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M7 2v10M2 7h10" /></svg>
+          <input
+            id="quick-add-input"
+            type="text"
+            maxlength="300"
+            autocomplete="off"
+            aria-label="Add a task"
+            placeholder="Add a task and press Enter, e.g. ring Bob friday A1209 !"
+          />
+          <button class="qfield__hint" type="button" id="add-task" title="Open the full form (Ctrl+N)">Full form</button>
+        </form>
+        <label class="qfield qfield--search">
+          <svg class="qfield__icon" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="6" r="4.2" /><path d="M9.2 9.2L12.5 12.5" /></svg>
+          <input id="quick-search" type="text" autocomplete="off" aria-label="Search tasks" placeholder="Search title, job, label, notes" />
+          <span class="qfield__hint">Ctrl+F</span>
+        </label>
+      </div>
+      <div id="quick-preview" class="qpreview" hidden></div>
+      <div class="qtools">
+        <div id="chips" class="qchips"></div>
+        <span class="qtools__grow"></span>
+        <button id="replan-btn" class="qbtn qbtn--accent" type="button" hidden></button>
+        <div class="seg">
+          <button id="quick-view-list" class="seg__btn" type="button">List</button>
+          <button id="quick-view-week" class="seg__btn" type="button">Week</button>
+        </div>
+        <select id="group-by" class="select" aria-label="Group by">
+          <option value="due">Group: Due date</option>
+          <option value="job">Group: Job</option>
+          <option value="label">Group: Label</option>
         </select>
         <select id="owner-filter" class="select" aria-label="Owner"></select>
+        <button id="toggle-archived" class="qbtn" type="button">Archived</button>
       </div>
-      <div id="task-list" class="list"></div>
+      <div class="qbody">
+        <div id="task-list" class="qlist"></div>
+        <aside id="task-panel" class="qpanel" aria-label="Task detail" hidden></aside>
+      </div>
+      <div id="quick-foot" class="qfoot"></div>
     </section>
 
     <!-- ── ACOMS Tasks (the company queue) ─────────────────────────────── -->
@@ -103,7 +121,10 @@
     <!-- Dialogs: task form, note editor, confirm. Drawn by tasks-window.js. -->
     <div id="dialog" class="dialog" hidden></div>
 
+    <script src="chat-task-parse.js"></script>
+
     <script src="tasks-rules.js"></script>
     <script src="tasks-window.js"></script>
+    <script src="tasks-quick.js"></script>
   </body>
 </html>
