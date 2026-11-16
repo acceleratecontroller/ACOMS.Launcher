@@ -35,6 +35,10 @@ const quick = {
   sel: null, // the task open in the side panel
   panelKey: null,
   replan: false,
+  // The task Re-plan is showing. It stays put while its fields are edited (an
+  // edit can take it out of the queue) until a re-plan button moves on.
+  replanId: null,
+  replanKey: null,
   skipped: {}
 };
 
@@ -207,6 +211,7 @@ function renderQuick() {
   const counts = R.quickCounts(owned);
   const queue = archived ? [] : R.replanQueue(owned, undefined, quick.skipped);
   if (archived) quick.replan = false;
+  if (!quick.replan) quick.replanKey = null;
 
   renderQuickTools(source, counts, queue, archived);
 
@@ -214,7 +219,7 @@ function renderQuick() {
   const list = $('task-list');
   const keep = focusedTaskId();
   list.className = `qlist${quick.replan ? ' qlist--replan' : quick.view === 'week' && !archived ? ' qlist--week' : ''}`;
-  if (quick.replan) list.replaceChildren(replanCard(queue));
+  if (quick.replan) renderReplan(list, source, queue);
   else if (quick.view === 'week' && !archived) list.replaceChildren(weekBoard(shown));
   else list.replaceChildren(...listNodes(shown, archived));
   if (keep) refocusTask(keep);
@@ -496,10 +501,47 @@ const REPLAN_ACTIONS = [
   { key: 'x', label: 'Not needed, archive it', run: (t) => act({ type: 'task:archive', id: t.id }) }
 ];
 
-function replanCurrent() {
+function replanQueueNow() {
   const source = state.quick || [];
   const owned = source.filter((t) => !ui.owner || t.assigneeId === ui.owner);
-  return R.replanQueue(owned, undefined, quick.skipped)[0] || null;
+  return R.replanQueue(owned, undefined, quick.skipped);
+}
+
+// The task on screen: the one already showing while it is still open and not
+// skipped, else the head of the queue.
+function replanPick(source, queue) {
+  const held = quick.replanId && !quick.skipped[quick.replanId] ? source.find((t) => t.id === quick.replanId) : null;
+  if (held && held.status !== 'COMPLETED' && !held.isArchived) {
+    return queue.find((q) => q.task.id === held.id) || { task: held, why: 'edited', days: 0 };
+  }
+  return queue[0] || null;
+}
+
+function replanCurrent() {
+  return replanPick(state.quick || [], replanQueueNow());
+}
+
+function renderReplan(list, source, queue) {
+  const cur = replanPick(source, queue);
+  quick.replanId = cur ? cur.task.id : null;
+  const t = cur ? cur.task : null;
+  const key = JSON.stringify(
+    t
+      ? [
+          t.id, t.title, t.projectId, t.notes, t.label, t.dueDate, t.status, t.priority, t.assigneeId,
+          Boolean(t._pending), state.isAdmin, queue.length, cur.why, cur.days, t.waitingSince,
+          (R.jobStageOf(t, state.jobStages) || {}).stage,
+          (R.addedBy(t, state.assignees, state.me) || {}).name
+        ]
+      : ['empty']
+  );
+  const drawn = list.querySelector('.qreplan');
+  if (drawn && key === quick.replanKey) return;
+  // Someone is typing in it: leave it alone until they are done.
+  const a = document.activeElement;
+  if (drawn && t && drawn.dataset.id === t.id && list.contains(a) && /^(INPUT|TEXTAREA)$/.test(a.tagName)) return;
+  quick.replanKey = key;
+  list.replaceChildren(replanCard(cur, queue, source));
 }
 
 function replanDo(key) {
@@ -507,11 +549,14 @@ function replanDo(key) {
   if (!cur || !state.isAdmin) return;
   if (key === 's') {
     quick.skipped = { ...quick.skipped, [cur.task.id]: true };
+    quick.replanId = null;
     render();
     return;
   }
   const action = REPLAN_ACTIONS.find((a) => a.key === key);
   if (!action) return;
+  // A button moves on: the next draw takes the head of the queue.
+  quick.replanId = null;
   // An undated task kept as it is has been looked at: it leaves this run, and
   // the save itself restarts its "not touched" clock.
   if (key === 'n') quick.skipped = { ...quick.skipped, [cur.task.id]: true };
@@ -520,14 +565,16 @@ function replanDo(key) {
 
 function setReplan(on) {
   quick.replan = on;
+  quick.replanId = null;
+  quick.replanKey = null;
   quick.skipped = {};
   if (on) quick.sel = null;
   render();
 }
 
-function replanCard(queue) {
+function replanCard(cur, queue, source) {
   const wrap = el('div', 'qreplan');
-  if (queue.length === 0) {
+  if (!cur) {
     wrap.append(
       el('div', 'qreplan__title', 'Nothing left to re-plan'),
       el('p', 'qreplan__why', 'Nothing is overdue, and every undated task has been looked at this week.'),
@@ -535,17 +582,29 @@ function replanCard(queue) {
     );
     return wrap;
   }
-  const { task, why, days } = queue[0];
-  const job = jobTagOf(task);
+  const { task, why, days } = cur;
+  wrap.dataset.id = task.id;
   const what =
     why === 'overdue'
       ? `Due ${R.dueShort(task)}, ${plural(days, 'day')} late`
-      : `No date, not touched for ${plural(days, 'day')}`;
-  const meta = [what, job ? job.text : '', statusText(task), task.priority === 'HIGH' ? 'High priority' : ''].filter(Boolean);
+      : why === 'edited'
+        ? task.dueDate
+          ? `Now due ${R.dueShort(task)}`
+          : 'No date'
+        : `No date, not touched for ${plural(days, 'day')}`;
+  const left = queue.filter((q) => q.task.id !== task.id).length;
+  const top = el('div', 'qreplan__top');
+  top.append(
+    el('span', 'qreplan__count', left ? `${left} more after this` : 'Last one'),
+    el('span', `qreplan__meta${why === 'overdue' ? ' qdue--overdue' : ''}`, what)
+  );
+  wrap.append(top);
 
-  wrap.append(el('div', 'qreplan__count', `${queue.length} to go`), el('div', 'qreplan__title', task.title));
-  wrap.append(el('div', `qreplan__meta${why === 'overdue' ? ' qdue--overdue' : ''}`, meta.join(' · ')));
-  if (task.notes) wrap.append(el('p', 'qreplan__notes', task.notes));
+  // Everything the side panel has, laid out wide: the same fields, saving the
+  // same way. The re-plan buttons below do the moving on.
+  const detail = el('div', 'qpanel qpanel--focus');
+  detail.append(...buildPanel(task, relatedTasks(task, source), { focus: true }));
+  wrap.append(detail);
 
   const grid = el('div', 'qreplan__grid');
   for (const a of REPLAN_ACTIONS) {
@@ -554,21 +613,18 @@ function replanCard(queue) {
     b.append(el('span', 'qreplan__label', a.label), el('span', 'qreplan__key', a.key.toUpperCase()));
     grid.append(b);
   }
-  wrap.append(grid);
+  // The buttons stay on screen while a long task scrolls above them.
+  const bar = el('div', 'qreplan__bar');
+  bar.append(grid);
 
   const foot = el('div', 'qreplan__foot');
   foot.append(
-    button('qlink', 'Skip for now (S)', () => replanDo('s')),
-    button('qlink', 'Open it', () => {
-      quick.replan = false;
-      quick.sel = task.id;
-      quick.panelKey = null;
-      render();
-    }),
+    button('qlink', why === 'edited' ? 'Next (S)' : 'Skip for now (S)', () => replanDo('s')),
     el('span', 'qtools__grow'),
     button('qlink', 'Back to the list (Esc)', () => setReplan(false))
   );
-  wrap.append(foot);
+  bar.append(foot);
+  wrap.append(bar);
   return wrap;
 }
 
@@ -652,7 +708,9 @@ function saveOnLeave(control, read, save, oneLine) {
   }
 }
 
-function buildPanel(task, related) {
+// `focus` is Re-plan's wide version: no close button, no Move it row and no
+// Complete / Archive buttons, because Re-plan's own buttons do those.
+function buildPanel(task, related, { focus = false } = {}) {
   const editable = canEdit(task);
   const done = task.status === 'COMPLETED';
   const bucket = R.bucketOf(task);
@@ -676,7 +734,8 @@ function buildPanel(task, related) {
   const close = button('qpanel__close', null, closePanel, 'Close (Esc)');
   close.setAttribute('aria-label', 'Close');
   close.append(svgIcon(QICON.close));
-  head.append(check, title, close);
+  if (focus) head.append(check, title);
+  else head.append(check, title, close);
   out.push(head);
 
   // Due
@@ -702,7 +761,7 @@ function buildPanel(task, related) {
     { value: R.addDaysIso(14), label: 'In 2 weeks' },
     { value: null, label: 'No date' }
   ];
-  out.push(panelRow('Move it', choice(moves, iso, (v) => saveTask(task, { dueDate: v }), !editable)));
+  if (!focus) out.push(panelRow('Move it', choice(moves, iso, (v) => saveTask(task, { dueDate: v }), !editable)));
 
   // Progress and priority
   out.push(
@@ -799,6 +858,7 @@ function buildPanel(task, related) {
     box.append(el('div', 'qpanel__label', `Also open on ${R.jobKey(task.projectId)}`));
     for (const t of related) {
       const b = button('qrelated', null, () => {
+        quick.replan = false;
         quick.sel = t.id;
         quick.panelKey = null;
         render();
@@ -817,7 +877,9 @@ function buildPanel(task, related) {
   meta.append(el('span', null, facts.join(', ')));
   const email = R.sourceEmailUrl(task, state.emailBase);
   if (email) meta.append(link(email, 'qlink', 'View source email'));
-  out.push(meta, el('span', 'qtools__grow'));
+  out.push(meta);
+  if (focus) return out;
+  out.push(el('span', 'qtools__grow'));
 
   // Actions
   const actions = el('div', 'qpanel__actions');
@@ -884,7 +946,7 @@ document.addEventListener('keydown', (e) => {
       $('quick-search').value = '';
       quick.search = '';
       render();
-    } else if (isTyping(e.target) && $('task-panel').contains(e.target)) {
+    } else if (isTyping(e.target) && ($('task-panel').contains(e.target) || $('task-list').contains(e.target))) {
       e.target.blur();
     } else if (quick.replan) {
       setReplan(false);

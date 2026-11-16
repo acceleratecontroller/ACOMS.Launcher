@@ -1794,22 +1794,52 @@ button.qfield__hint:hover {
 /* Re-plan */
 .qlist--replan {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  overflow-y: auto;
   justify-content: center;
   padding: 24px;
 }
 
 .qreplan {
   width: 100%;
-  max-width: 600px;
+  max-width: 720px;
+  margin: auto 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 12px;
 }
 
+.qreplan__top {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .qreplan__count {
   color: var(--q-muted);
+}
+
+/* The side panel's fields, wide, inside Re-plan. */
+.qreplan .qpanel--focus {
+  width: 100%;
+  max-width: none;
+  padding: 14px 16px;
+  border: 1px solid var(--q-line);
+  border-radius: 10px;
+  background: var(--q-panel);
+  overflow: visible;
+}
+
+.qreplan .qpanel--focus .qpanel__title {
+  font-size: 20px;
+}
+
+.qreplan .qpanel--focus .qpanel__notes {
+  field-sizing: content;
+  min-height: 72px;
+  max-height: 14em;
 }
 
 .qreplan__title {
@@ -1836,12 +1866,28 @@ button.qfield__hint:hover {
   overflow-y: auto;
 }
 
+.qreplan__bar {
+  position: sticky;
+  bottom: -24px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 0 24px;
+  background: var(--q-bg);
+}
+
 .qreplan__grid {
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 6px;
+}
+
+.qreplan__grid .qreplan__act {
+  min-height: 38px;
+  padding: 4px 10px;
+  font-size: 12.5px;
 }
 
 .qreplan__act {
