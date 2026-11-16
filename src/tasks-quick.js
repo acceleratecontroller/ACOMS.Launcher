@@ -343,6 +343,12 @@ function quickRow(task) {
     main.append(tag);
   }
   if (task.label && task.label !== 'Task') main.append(el('span', 'qtag qtag--label', task.label));
+  const from = R.addedBy(task, state.assignees, state.me);
+  if (from && from.kind === 'person') {
+    const tag = el('span', 'qfrom', `from ${from.name.split(' ')[0]}`);
+    tag.title = `Added by ${from.name}`;
+    main.append(tag);
+  }
 
   const status = el('span', 'qrow__status');
   if (!done && SHORT_STATUS[task.status]) status.append(el('span', `qdot qdot--${task.status}`), el('span', null, SHORT_STATUS[task.status]));
@@ -375,6 +381,23 @@ function selectTask(id) {
   quick.sel = quick.sel === id ? null : id;
   quick.panelKey = null;
   render();
+}
+
+// Moves to the next or previous task on screen, from the focused one (else the
+// one open in the panel). Folded groups are not on screen, so they are skipped.
+function stepTask(step) {
+  const ids = [...document.querySelectorAll('#task-list [data-id]')].map((r) => r.dataset.id);
+  if (ids.length === 0) return false;
+  const at = ids.indexOf(focusedTaskId() || quick.sel);
+  const next = at === -1 ? (step > 0 ? 0 : ids.length - 1) : Math.max(0, Math.min(ids.length - 1, at + step));
+  const id = ids[next];
+  if (quick.sel && quick.sel !== id) {
+    quick.sel = id;
+    quick.panelKey = null;
+    render();
+  }
+  refocusTask(id);
+  return true;
 }
 
 function focusedTaskId() {
@@ -565,6 +588,7 @@ function renderPanel(source) {
   const key = JSON.stringify([
     task.id, task.title, task.projectId, task.notes, task.label, task.dueDate, task.status, task.priority,
     task.assigneeId, Boolean(task._pending), Boolean(task.isArchived), state.isAdmin,
+    (R.addedBy(task, state.assignees, state.me) || {}).name,
     related.map((t) => [t.id, t.title, t.dueDate])
   ]);
   if (key === quick.panelKey) return;
@@ -684,7 +708,9 @@ function buildPanel(task, related) {
   out.push(panelRow('Priority', choice(R.PRIORITY_OPTIONS, task.priority || 'LOW', (v) => saveTask(task, { priority: v }), !editable)));
 
   // Job
-  const jobInput = el('input', 'qpanel__input');
+  // A textarea, so a long "A0023 · ref · name" wraps instead of running off the end.
+  const jobInput = el('textarea', 'qpanel__input');
+  jobInput.rows = 1;
   jobInput.value = task.projectId || '';
   jobInput.placeholder = 'Search by ACOMS no., client ref, name, address…';
   jobInput.autocomplete = 'off';
@@ -729,6 +755,8 @@ function buildPanel(task, related) {
     saveTask(task, { assigneeId: owner.value });
   });
   out.push(panelRow('Owner', owner));
+  const from = R.addedBy(task, state.assignees, state.me);
+  if (from) out.push(panelRow('Added by', el('span', 'qpanel__text', from.name)));
 
   // Notes
   const notes = el('textarea', 'qpanel__notes');
@@ -848,6 +876,12 @@ document.addEventListener('keydown', (e) => {
       e.preventDefault();
       replanDo(key);
     }
+    return;
+  }
+
+  // Up / Down walk the tasks; with the panel open it follows along.
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (stepTask(e.key === 'ArrowDown' ? 1 : -1)) e.preventDefault();
     return;
   }
 

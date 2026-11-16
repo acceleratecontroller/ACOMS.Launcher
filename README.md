@@ -219,8 +219,12 @@ yours: Quick Tasks, Recurring Tasks and the company tasks you've claimed.
     week), one at a time, oldest first, each dealt with in one key: Done,
     Today, Tomorrow, Next Monday, Waiting, No date, Not needed. Clicking the
     task reminder opens here.
-  - Keys on a task: Space completes it, T / M / W move it to today, tomorrow
-    or next Monday, Esc closes the panel.
+  - Keys on a task: Up / Down walk the list (the side panel follows when it is
+    open), Space completes it, T / M / W move it to today, tomorrow or next
+    Monday, Esc closes the panel.
+  - "Added by" in the panel, and "from <name>" on the line when someone else
+    added it. It is who created the task (matched to OS's staff list by
+    sign-in identity) or the app that raised it; hand-overs are not recorded.
 - **ACOMS Tasks** — the company queue the apps raise (job approvals, GIS
   views, the requests inbox…): **I'll take it**, **Release**, **Done**, **Not
   needed** (with a reason), **Reopen**. The title opens where the work is done;

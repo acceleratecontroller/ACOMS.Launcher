@@ -1932,6 +1932,9 @@ button.qfield__hint:hover {
   color: var(--q-text);
   resize: none;
   outline: none;
+  /* A long title shows whole, not two lines and a scrollbar. */
+  field-sizing: content;
+  max-height: 9em;
 }
 
 .qpanel__title:hover,
@@ -2016,11 +2019,34 @@ button.qfield__hint:hover {
   margin: 0;
 }
 
-.qpanel__job input {
+.qpanel__job input,
+.qpanel__job textarea {
   width: 100%;
   background: var(--q-field);
   border-color: var(--q-line);
   padding: 5px 8px;
+}
+
+/* The job wraps over as many lines as it needs, and the box grows with it. */
+.qpanel__job textarea {
+  display: block;
+  field-sizing: content;
+  min-height: 0;
+  max-height: 7.5em;
+  line-height: 1.4;
+  resize: none;
+  overflow-wrap: anywhere;
+}
+
+.qpanel__text {
+  padding: 5px 0;
+}
+
+.qfrom {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--q-faint);
+  white-space: nowrap;
 }
 
 .qpanel__notes {
