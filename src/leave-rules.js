@@ -159,48 +159,57 @@ function cardBounds(workArea, heights, index) {
   };
 }
 
-// At most four lines of leave in the picker (Dion 2026-11-24). Anything past
-// that becomes one more line: how many other people, and when the next of
-// them starts.
+// At most four people in the picker's leave strip (Dion 2026-11-24). Anyone
+// past that becomes one more line: how many other people, and when the next
+// of them starts.
 const MAX_UPCOMING_LINES = 4;
 
-// "Upcoming leave", as the lines the picker shows:
-// a name and when. Never the type of leave. Nobody off = no lines, and the
-// picker then shows nothing at all for it.
+// Upcoming leave, for the picker. Never the type of leave.
+//
+//   lines  the strip: ONE line per person (Dion 2026-11-25), their next leave,
+//          with `extra` = how many more stretches they have after it. Four
+//          people at most.
+//   more   the fifth line, when there are more people than that.
+//   all    everyone and every stretch, for the list a click on the strip opens.
+//
 // thisYear: leave in another year carries its year ("Tue 30 Mar to Fri 16 Apr 2027").
 function upcomingLines(upcoming, thisYear = new Date().getFullYear()) {
   const list = Array.isArray(upcoming) ? upcoming : [];
-  const all = list.map((u) => ({
-    name: u.employeeName || 'Someone',
-    when:
-      formatRange(u.startDate, u.endDate) +
-      (Number(String(u.endDate || u.startDate || '').slice(0, 4)) !== thisYear
-        ? ` ${String(u.endDate || u.startDate || '').slice(0, 4)}`
-        : '') +
-      (u.partDay ? ` (part day${typeof u.hours === 'number' ? `, ${u.hours} h` : ''})` : ''),
-    pending: u.pending === true,
-    startDate: u.startDate
-  }));
   const yearOf = (ymd) => (Number(String(ymd || '').slice(0, 4)) !== thisYear ? ` ${String(ymd || '').slice(0, 4)}` : '');
-  const shown = all.slice(0, MAX_UPCOMING_LINES);
-  const rest = all.slice(MAX_UPCOMING_LINES);
-  let more = '';
-  if (rest.length > 0) {
-    // "Other people" means people not already on the four lines above; someone
-    // shown who is also off again later is not another person.
-    const shownNames = new Set(shown.map((l) => l.name));
-    const others = new Set(rest.map((l) => l.name).filter((n) => !shownNames.has(n)));
-    // "Next one" is the next of those other people, not a later stretch for
-    // someone already listed.
-    const nextOther = rest.find((l) => others.has(l.name));
-    more =
-      others.size > 0
-        ? `plus ${others.size} other ${others.size === 1 ? 'person' : 'people'}, next one ${formatDay(nextOther.startDate)}${yearOf(nextOther.startDate)}`
-        : `plus ${rest.length} more, next one ${formatDay(rest[0].startDate)}${yearOf(rest[0].startDate)}`;
+
+  // People in the order of when they are next off (the list comes soonest first).
+  const people = new Map();
+  for (const u of list) {
+    const name = u.employeeName || 'Someone';
+    if (!people.has(name)) people.set(name, { name, items: [] });
+    people.get(name).items.push({
+      when:
+        formatRange(u.startDate, u.endDate) +
+        yearOf(u.endDate || u.startDate) +
+        (u.partDay ? ` (part day${typeof u.hours === 'number' ? `, ${u.hours} h` : ''})` : ''),
+      pending: u.pending === true,
+      startDate: u.startDate
+    });
   }
+  const everyone = [...people.values()];
+  const shown = everyone.slice(0, MAX_UPCOMING_LINES);
+  const rest = everyone.slice(MAX_UPCOMING_LINES);
+  const next = rest.length > 0 ? rest[0].items[0].startDate : null;
   return {
-    lines: shown.map(({ name, when, pending }) => ({ name, when, pending })),
-    more
+    lines: shown.map((p) => ({
+      name: p.name,
+      when: p.items[0].when,
+      pending: p.items[0].pending,
+      extra: p.items.length - 1
+    })),
+    more:
+      rest.length > 0
+        ? `plus ${rest.length} other ${rest.length === 1 ? 'person' : 'people'}, next one ${formatDay(next)}${yearOf(next)}`
+        : '',
+    all: everyone.map((p) => ({
+      name: p.name,
+      items: p.items.map(({ when, pending }) => ({ when, pending }))
+    }))
   };
 }
 

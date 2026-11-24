@@ -5,13 +5,15 @@
 
 const listEl = document.getElementById('portal-list');
 const leaveSlot = document.getElementById('leave-slot');
+const leavePanel = document.getElementById('leave-panel');
+const leavePanelList = document.getElementById('leave-panel-list');
 const updateSlot = document.getElementById('update-slot');
 const subtitleEl = document.getElementById('subtitle');
 const settingsPanel = document.getElementById('settings-panel');
 const settingsToggle = document.getElementById('settings-toggle');
 
 let portals = [];
-let upcomingLeave = { status: 'off', lines: [], more: '' };
+let upcomingLeave = { status: 'off', lines: [], more: '', all: [] };
 let openIds = new Set();
 let appVersion = '';
 let update = null;
@@ -383,12 +385,15 @@ function renderUpcomingLeave() {
   if (status === 'off') return;
   const lines = (upcomingLeave && upcomingLeave.lines) || [];
 
-  // The whole strip is one button: it opens the leave requests in Controller.
+  // The whole strip is one button: it opens everyone's leave, for a quick look.
   const box = document.createElement('button');
   box.type = 'button';
   box.className = 'leave';
-  box.title = 'Open leave requests';
-  box.addEventListener('click', () => window.acoms.openLeaveList());
+  box.title = 'See everyone\'s leave';
+  box.addEventListener('click', () => {
+    renderLeavePanel();
+    leavePanel.hidden = false;
+  });
   const title = document.createElement('div');
   title.className = 'leave__title';
   title.textContent = 'Upcoming leave';
@@ -413,6 +418,14 @@ function renderUpcomingLeave() {
     when.textContent = line.when;
     row.appendChild(name);
     row.appendChild(when);
+    // One line per person: their next leave, and how many more they have after it.
+    if (line.extra > 0) {
+      const extra = document.createElement('span');
+      extra.className = 'leave__extra';
+      extra.textContent = `+${line.extra} more`;
+      extra.title = `${line.extra} more leave ${line.extra === 1 ? 'entry' : 'entries'} after this one`;
+      row.appendChild(extra);
+    }
     if (line.pending) {
       const tag = document.createElement('span');
       tag.className = 'leave__pending';
@@ -422,7 +435,7 @@ function renderUpcomingLeave() {
     }
     box.appendChild(row);
   }
-  // A fifth line when more than four are off: how many others, and when the next starts.
+  // A fifth line when more than four people are off: how many others, and when the next starts.
   if (upcomingLeave.more) {
     const more = document.createElement('div');
     more.className = 'leave__more';
@@ -430,6 +443,46 @@ function renderUpcomingLeave() {
     box.appendChild(more);
   }
   leaveSlot.appendChild(box);
+}
+
+// Everyone's upcoming leave, person by person, every stretch. Shown over the
+// picker when the strip is clicked; redrawn if the list changes while open.
+function renderLeavePanel() {
+  leavePanelList.textContent = '';
+  const all = (upcomingLeave && upcomingLeave.all) || [];
+  if (all.length === 0) {
+    const note = document.createElement('div');
+    note.className = 'leavepanel__none';
+    const status = (upcomingLeave && upcomingLeave.status) || 'off';
+    note.textContent =
+      status === 'loading' ? 'Loading leave…' : status === 'unavailable' ? 'Leave is not available right now' : 'No one on leave';
+    leavePanelList.appendChild(note);
+    return;
+  }
+  for (const person of all) {
+    const block = document.createElement('div');
+    block.className = 'leavepanel__person';
+    const name = document.createElement('div');
+    name.className = 'leavepanel__name';
+    name.textContent = person.name;
+    block.appendChild(name);
+    for (const item of person.items || []) {
+      const row = document.createElement('div');
+      row.className = 'leavepanel__item';
+      const when = document.createElement('span');
+      when.textContent = item.when;
+      row.appendChild(when);
+      if (item.pending) {
+        const tag = document.createElement('span');
+        tag.className = 'leave__pending';
+        tag.textContent = 'pending';
+        tag.title = 'Asked for, not yet approved';
+        row.appendChild(tag);
+      }
+      block.appendChild(row);
+    }
+    leavePanelList.appendChild(block);
+  }
 }
 
 async function init() {
@@ -451,11 +504,22 @@ async function init() {
     if (opening) renderSettings();
   });
 
-  upcomingLeave = (await window.acoms.getUpcomingLeave()) || { status: 'off', lines: [], more: '' };
+  upcomingLeave = (await window.acoms.getUpcomingLeave()) || { status: 'off', lines: [], more: '', all: [] };
   renderUpcomingLeave();
   window.acoms.onUpcomingLeaveChanged((next) => {
-    upcomingLeave = next || { status: 'off', lines: [], more: '' };
+    upcomingLeave = next || { status: 'off', lines: [], more: '', all: [] };
     renderUpcomingLeave();
+    if (!leavePanel.hidden) renderLeavePanel();
+  });
+  document.getElementById('leave-panel-close').addEventListener('click', () => {
+    leavePanel.hidden = true;
+  });
+  document.getElementById('leave-panel-open').addEventListener('click', () => {
+    leavePanel.hidden = true;
+    window.acoms.openLeaveList();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !leavePanel.hidden) leavePanel.hidden = true;
   });
 
   render();

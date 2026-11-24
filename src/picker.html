@@ -40,6 +40,18 @@
       <!-- Who is on leave soon is rendered by picker.js. Nobody off: nothing at all. -->
     </section>
 
+    <!-- Everyone's upcoming leave, over the top of the picker; a click on the strip opens it. -->
+    <section id="leave-panel" class="leavepanel" aria-label="Everyone's upcoming leave" hidden>
+      <div class="leavepanel__head">
+        <h2>Upcoming leave</h2>
+        <button id="leave-panel-close" class="iconbtn" type="button" title="Close" aria-label="Close">&#x2715;</button>
+      </div>
+      <div id="leave-panel-list" class="leavepanel__list"></div>
+      <div class="leavepanel__foot">
+        <button id="leave-panel-open" class="leavepanel__open" type="button">Open leave requests</button>
+      </div>
+    </section>
+
     <main id="portal-list" class="portal-list" aria-live="polite">
       <!-- Cards are rendered by picker.js -->
     </main>

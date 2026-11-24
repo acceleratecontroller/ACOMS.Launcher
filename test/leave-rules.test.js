@@ -209,37 +209,71 @@ const upcoming = (over = {}) => ({
 // The tests read as if it is 2026, whatever year they run in.
 const lines2026 = (u) => rules.upcomingLines(u, 2026);
 
-test('a stretch of leave is a name and when, nothing about the type', () => {
+test('one person, one stretch: a name and when, nothing about the type', () => {
   const r = lines2026([upcoming()]);
-  assert.deepStrictEqual(r.lines, [{ name: 'Hendrik de Wet', when: 'Mon 7 Dec to Fri 11 Dec', pending: false }]);
+  assert.deepStrictEqual(r.lines, [{ name: 'Hendrik de Wet', when: 'Mon 7 Dec to Fri 11 Dec', pending: false, extra: 0 }]);
   assert.strictEqual(r.more, '');
+  assert.deepStrictEqual(r.all, [{ name: 'Hendrik de Wet', items: [{ when: 'Mon 7 Dec to Fri 11 Dec', pending: false }] }]);
 });
 
 test('a single day, a part day and pending leave each read plainly', () => {
   const r = lines2026([
-    upcoming({ endDate: '2026-12-07' }),
-    upcoming({ endDate: '2026-12-07', partDay: true, hours: 4 }),
-    upcoming({ pending: true })
+    upcoming({ employeeName: 'A', endDate: '2026-12-07' }),
+    upcoming({ employeeName: 'B', endDate: '2026-12-07', partDay: true, hours: 4 }),
+    upcoming({ employeeName: 'C', pending: true })
   ]);
   assert.strictEqual(r.lines[0].when, 'Mon 7 Dec');
   assert.strictEqual(r.lines[1].when, 'Mon 7 Dec (part day, 4 h)');
   assert.strictEqual(r.lines[2].pending, true);
 });
 
-test('nobody on leave gives no lines, so the picker shows nothing at all', () => {
-  assert.deepStrictEqual(lines2026([]), { lines: [], more: '' });
-  assert.deepStrictEqual(lines2026(undefined), { lines: [], more: '' });
-  assert.deepStrictEqual(lines2026(null), { lines: [], more: '' });
+test('nobody on leave gives no lines', () => {
+  for (const none of [[], undefined, null]) {
+    assert.deepStrictEqual(lines2026(none), { lines: [], more: '', all: [] });
+  }
 });
 
-test('four or fewer: every line, and no fifth line', () => {
+test('a person with several stretches gets ONE line: the next one, and how many more', () => {
+  const r = lines2026([
+    upcoming({ employeeName: 'James Denison', startDate: '2026-12-01', endDate: '2026-12-01' }),
+    upcoming({ employeeName: 'James Denison', startDate: '2026-12-02', endDate: '2026-12-02', partDay: true, hours: 4 }),
+    upcoming({ employeeName: 'Hendrik de Wet' }),
+    upcoming({ employeeName: 'James Denison', startDate: '2026-12-07', endDate: '2026-12-07', partDay: true, hours: 4 }),
+    upcoming({ employeeName: 'James Denison', startDate: '2026-12-16', endDate: '2026-12-16', pending: true })
+  ]);
+  assert.deepStrictEqual(r.lines, [
+    { name: 'James Denison', when: 'Tue 1 Dec', pending: false, extra: 3 },
+    { name: 'Hendrik de Wet', when: 'Mon 7 Dec to Fri 11 Dec', pending: false, extra: 0 }
+  ]);
+  assert.strictEqual(r.more, '');
+});
+
+test('the full list keeps every stretch, grouped by person', () => {
+  const r = lines2026([
+    upcoming({ employeeName: 'James Denison', startDate: '2026-12-01', endDate: '2026-12-01' }),
+    upcoming({ employeeName: 'Hendrik de Wet' }),
+    upcoming({ employeeName: 'James Denison', startDate: '2026-12-16', endDate: '2026-12-16', pending: true })
+  ]);
+  assert.deepStrictEqual(r.all, [
+    {
+      name: 'James Denison',
+      items: [
+        { when: 'Tue 1 Dec', pending: false },
+        { when: 'Wed 16 Dec', pending: true }
+      ]
+    },
+    { name: 'Hendrik de Wet', items: [{ when: 'Mon 7 Dec to Fri 11 Dec', pending: false }] }
+  ]);
+});
+
+test('four people or fewer: every person, and no fifth line', () => {
   const four = Array.from({ length: 4 }, (_, i) => upcoming({ employeeName: `Person ${i}` }));
   const r = lines2026(four);
   assert.strictEqual(r.lines.length, 4);
   assert.strictEqual(r.more, '');
 });
 
-test('more than four: four lines, then how many other people and when the next one starts', () => {
+test('more than four people: four lines, then how many other people and when the next one starts', () => {
   const nine = Array.from({ length: 9 }, (_, i) =>
     upcoming({ employeeName: `Person ${i}`, startDate: `2026-12-${String(7 + i).padStart(2, '0')}`, endDate: `2026-12-${String(7 + i).padStart(2, '0')}` })
   );
@@ -247,6 +281,7 @@ test('more than four: four lines, then how many other people and when the next o
   assert.strictEqual(rules.MAX_UPCOMING_LINES, 4);
   assert.deepStrictEqual(r.lines.map((l) => l.name), ['Person 0', 'Person 1', 'Person 2', 'Person 3']);
   assert.strictEqual(r.more, 'plus 5 other people, next one Fri 11 Dec');
+  assert.strictEqual(r.all.length, 9, 'the full list still has everyone');
 });
 
 test('one more person reads as "1 other person"', () => {
@@ -254,18 +289,12 @@ test('one more person reads as "1 other person"', () => {
   assert.strictEqual(lines2026(five).more, 'plus 1 other person, next one Mon 7 Dec');
 });
 
-test('someone already shown who is off again later is not counted as another person', () => {
-  const list = [
-    ...Array.from({ length: 4 }, (_, i) => upcoming({ employeeName: `Person ${i}` })),
-    upcoming({ employeeName: 'Person 0', startDate: '2026-12-16', endDate: '2026-12-17' }),
-    upcoming({ employeeName: 'Person 9', startDate: '2026-12-18', endDate: '2026-12-18' })
-  ];
-  assert.strictEqual(lines2026(list).more, 'plus 1 other person, next one Fri 18 Dec');
-  const onlyRepeats = list.slice(0, 5);
-  assert.strictEqual(lines2026(onlyRepeats).more, 'plus 1 more, next one Wed 16 Dec');
-});
-
-test('leave in another year carries its year', () => {
+test('leave in another year carries its year, in the strip and in the fifth line', () => {
   const r = lines2026([upcoming({ employeeName: 'Dion Harre', startDate: '2027-03-30', endDate: '2027-04-16' })]);
   assert.strictEqual(r.lines[0].when, 'Tue 30 Mar to Fri 16 Apr 2027');
+  const five = [
+    ...Array.from({ length: 4 }, (_, i) => upcoming({ employeeName: `Person ${i}` })),
+    upcoming({ employeeName: 'Dion Harre', startDate: '2027-03-30', endDate: '2027-04-16' })
+  ];
+  assert.strictEqual(lines2026(five).more, 'plus 1 other person, next one Tue 30 Mar 2027');
 });
