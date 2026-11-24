@@ -1121,7 +1121,7 @@ ipcMain.handle('chat:sign-in', () => {
 // only opens it and shows the overdue count.
 ipcMain.handle('tasks:open', () => openTasks());
 ipcMain.handle('tasks:badge', () => tasksBadge());
-// Who is on leave in the next two weeks, for the strip at the top of the picker.
+// Upcoming leave, soonest first, for the strip at the top of the picker.
 ipcMain.handle('leave:upcoming', () => leave.upcoming());
 ipcMain.handle('leave:open-list', () => leave.openLeaveList());
 ipcMain.handle('tasks:get', () => tasks.snapshot());

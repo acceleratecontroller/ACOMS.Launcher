@@ -373,7 +373,7 @@ function render() {
   if (!settingsPanel.hidden) renderSettings();
 }
 
-// Who is on leave in the next two weeks, above the portal list. The strip
+// Upcoming leave, soonest first, above the portal list. The strip
 // always takes the same room, so nothing below it moves when the list
 // arrives (Dion 2026-11-25): it says it is loading, then who is off, or that
 // nobody is. Only a Launcher with no leave set up has no strip.
@@ -391,7 +391,7 @@ function renderUpcomingLeave() {
   box.addEventListener('click', () => window.acoms.openLeaveList());
   const title = document.createElement('div');
   title.className = 'leave__title';
-  title.textContent = 'On leave, next 2 weeks';
+  title.textContent = 'Upcoming leave';
   box.appendChild(title);
 
   if (lines.length === 0) {

@@ -164,19 +164,24 @@ function cardBounds(workArea, heights, index) {
 // them starts.
 const MAX_UPCOMING_LINES = 4;
 
-// "Who is on leave in the next two weeks", as the lines the picker shows:
+// "Upcoming leave", as the lines the picker shows:
 // a name and when. Never the type of leave. Nobody off = no lines, and the
 // picker then shows nothing at all for it.
-function upcomingLines(upcoming) {
+// thisYear: leave in another year carries its year ("Tue 30 Mar to Fri 16 Apr 2027").
+function upcomingLines(upcoming, thisYear = new Date().getFullYear()) {
   const list = Array.isArray(upcoming) ? upcoming : [];
   const all = list.map((u) => ({
     name: u.employeeName || 'Someone',
     when:
       formatRange(u.startDate, u.endDate) +
+      (Number(String(u.endDate || u.startDate || '').slice(0, 4)) !== thisYear
+        ? ` ${String(u.endDate || u.startDate || '').slice(0, 4)}`
+        : '') +
       (u.partDay ? ` (part day${typeof u.hours === 'number' ? `, ${u.hours} h` : ''})` : ''),
     pending: u.pending === true,
     startDate: u.startDate
   }));
+  const yearOf = (ymd) => (Number(String(ymd || '').slice(0, 4)) !== thisYear ? ` ${String(ymd || '').slice(0, 4)}` : '');
   const shown = all.slice(0, MAX_UPCOMING_LINES);
   const rest = all.slice(MAX_UPCOMING_LINES);
   let more = '';
@@ -190,8 +195,8 @@ function upcomingLines(upcoming) {
     const nextOther = rest.find((l) => others.has(l.name));
     more =
       others.size > 0
-        ? `plus ${others.size} other ${others.size === 1 ? 'person' : 'people'}, next one ${formatDay(nextOther.startDate)}`
-        : `plus ${rest.length} more, next one ${formatDay(rest[0].startDate)}`;
+        ? `plus ${others.size} other ${others.size === 1 ? 'person' : 'people'}, next one ${formatDay(nextOther.startDate)}${yearOf(nextOther.startDate)}`
+        : `plus ${rest.length} more, next one ${formatDay(rest[0].startDate)}${yearOf(rest[0].startDate)}`;
   }
   return {
     lines: shown.map(({ name, when, pending }) => ({ name, when, pending })),
