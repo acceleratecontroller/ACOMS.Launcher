@@ -42,8 +42,34 @@ body {
 
 .header__actions {
   display: flex;
-  flex: 0 0 auto;
-  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Next RDO and next public holiday, beside the cog: two small right-aligned lines. */
+.keydates {
+  min-width: 0;
+  text-align: right;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.keydates__row {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.keydates__label {
+  color: var(--muted);
+  margin-right: 5px;
+}
+
+.keydates__when {
+  color: var(--text);
+  font-weight: 600;
 }
 
 /* Chat button: the unread count rides on its corner. */

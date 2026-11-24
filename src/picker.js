@@ -6,6 +6,7 @@
 const listEl = document.getElementById('portal-list');
 const leaveSlot = document.getElementById('leave-slot');
 const leavePanel = document.getElementById('leave-panel');
+const keyDatesEl = document.getElementById('key-dates');
 const leavePanelList = document.getElementById('leave-panel-list');
 const updateSlot = document.getElementById('update-slot');
 const subtitleEl = document.getElementById('subtitle');
@@ -447,6 +448,29 @@ function renderUpcomingLeave() {
 
 // Everyone's upcoming leave, person by person, every stretch. Shown over the
 // picker when the strip is clicked; redrawn if the list changes while open.
+// Beside the cog: the next RDO, and the next public holiday when one is
+// within a month. Two short lines; nothing until they are known.
+function renderKeyDates() {
+  keyDatesEl.textContent = '';
+  const d = (upcomingLeave && upcomingLeave.dates) || {};
+  const add = (label, when, title) => {
+    const row = document.createElement('div');
+    row.className = 'keydates__row';
+    row.title = title;
+    const l = document.createElement('span');
+    l.className = 'keydates__label';
+    l.textContent = label;
+    const w = document.createElement('span');
+    w.className = 'keydates__when';
+    w.textContent = when;
+    row.appendChild(l);
+    row.appendChild(w);
+    keyDatesEl.appendChild(row);
+  };
+  if (d.rdo) add('RDO', d.rdo, `Next RDO: ${d.rdo}`);
+  if (d.holiday) add(d.holiday.name, d.holiday.when, `Next public holiday: ${d.holiday.name}, ${d.holiday.when}`);
+}
+
 function renderLeavePanel() {
   leavePanelList.textContent = '';
   const all = (upcomingLeave && upcomingLeave.all) || [];
@@ -506,9 +530,11 @@ async function init() {
 
   upcomingLeave = (await window.acoms.getUpcomingLeave()) || { status: 'off', lines: [], more: '', all: [] };
   renderUpcomingLeave();
+  renderKeyDates();
   window.acoms.onUpcomingLeaveChanged((next) => {
     upcomingLeave = next || { status: 'off', lines: [], more: '', all: [] };
     renderUpcomingLeave();
+  renderKeyDates();
     if (!leavePanel.hidden) renderLeavePanel();
   });
   document.getElementById('leave-panel-close').addEventListener('click', () => {

@@ -225,7 +225,7 @@ async function poll() {
       return;
     }
     const quiet = store.inQuietHours();
-    setUpcoming({ status: 'ready', ...rules.upcomingLines(r.data.upcoming) });
+    setUpcoming({ status: 'ready', ...rules.upcomingLines(r.data.upcoming), dates: rules.keyDates(r.data.dates) });
 
     const plan = rules.planCards({
       toDecide: Array.isArray(r.data.toDecide) ? r.data.toDecide : [],
