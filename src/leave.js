@@ -42,6 +42,26 @@ let config = null; // { portal, feed, act, page }
 let openPage = null; // injected by main.js: (portalId, url) => void
 let timer = null;
 let polling = false;
+// Who is on leave in the next two weeks, as the picker shows it. Kept as it
+// was last read, so the picker has it the moment it opens.
+let upcoming = { lines: [], more: 0 };
+let listeners = [];
+
+function onUpcomingChanged(callback) {
+  listeners.push(callback);
+}
+
+function setUpcoming(next) {
+  if (JSON.stringify(next) === JSON.stringify(upcoming)) return;
+  upcoming = next;
+  for (const fn of listeners) {
+    try {
+      fn(upcoming);
+    } catch {
+      // A listener that throws must not stop the poll.
+    }
+  }
+}
 
 // key -> { win, content, height }
 const cards = new Map();
@@ -186,6 +206,7 @@ async function poll() {
     // still open says so when its button is pressed.
     if (!r.ok || !r.data) return;
     const quiet = store.inQuietHours();
+    setUpcoming(rules.upcomingLines(r.data.upcoming));
 
     const plan = rules.planCards({
       toDecide: Array.isArray(r.data.toDecide) ? r.data.toDecide : [],
@@ -299,4 +320,4 @@ function dispose() {
   for (const key of [...cards.keys()]) closeCard(key);
 }
 
-module.exports = { init, dispose, poll };
+module.exports = { init, dispose, poll, onUpcomingChanged, upcoming: () => upcoming };

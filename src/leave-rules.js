@@ -159,6 +159,27 @@ function cardBounds(workArea, heights, index) {
   };
 }
 
+// More names than this in the picker is a wall; the rest are counted.
+const MAX_UPCOMING_LINES = 6;
+
+// "Who is on leave in the next two weeks", as the lines the picker shows:
+// a name and when. Never the type of leave. Nobody off = no lines, and the
+// picker then shows nothing at all for it.
+function upcomingLines(upcoming) {
+  const list = Array.isArray(upcoming) ? upcoming : [];
+  const lines = list.map((u) => ({
+    name: u.employeeName || 'Someone',
+    when:
+      formatRange(u.startDate, u.endDate) +
+      (u.partDay ? ` (part day${typeof u.hours === 'number' ? `, ${u.hours} h` : ''})` : ''),
+    pending: u.pending === true
+  }));
+  return {
+    lines: lines.slice(0, MAX_UPCOMING_LINES),
+    more: Math.max(0, lines.length - MAX_UPCOMING_LINES)
+  };
+}
+
 function clampHeight(h) {
   const n = Math.round(Number(h) || 0);
   return Math.min(CARD_MAX_HEIGHT, Math.max(CARD_MIN_HEIGHT, n));
@@ -179,5 +200,7 @@ module.exports = {
   answerContent,
   planAnswers,
   cardBounds,
-  clampHeight
+  clampHeight,
+  MAX_UPCOMING_LINES,
+  upcomingLines
 };

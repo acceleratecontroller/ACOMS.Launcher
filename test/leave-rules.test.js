@@ -193,3 +193,45 @@ test('a card is never shorter than its buttons or taller than the limit', () => 
   assert.strictEqual(rules.clampHeight(9999), rules.CARD_MAX_HEIGHT);
   assert.strictEqual(rules.clampHeight('nonsense'), rules.CARD_MIN_HEIGHT);
 });
+
+// ── Who is on leave in the next two weeks (the picker strip) ───────────────
+
+const upcoming = (over = {}) => ({
+  employeeName: 'Hendrik de Wet',
+  startDate: '2026-12-07',
+  endDate: '2026-12-11',
+  partDay: false,
+  hours: null,
+  pending: false,
+  ...over
+});
+
+test('a stretch of leave is a name and when, nothing about the type', () => {
+  const r = rules.upcomingLines([upcoming()]);
+  assert.deepStrictEqual(r.lines, [{ name: 'Hendrik de Wet', when: 'Mon 7 Dec to Fri 11 Dec', pending: false }]);
+  assert.strictEqual(r.more, 0);
+});
+
+test('a single day, a part day and pending leave each read plainly', () => {
+  const r = rules.upcomingLines([
+    upcoming({ endDate: '2026-12-07' }),
+    upcoming({ endDate: '2026-12-07', partDay: true, hours: 4 }),
+    upcoming({ pending: true })
+  ]);
+  assert.strictEqual(r.lines[0].when, 'Mon 7 Dec');
+  assert.strictEqual(r.lines[1].when, 'Mon 7 Dec (part day, 4 h)');
+  assert.strictEqual(r.lines[2].pending, true);
+});
+
+test('nobody on leave gives no lines, so the picker shows nothing at all', () => {
+  assert.deepStrictEqual(rules.upcomingLines([]), { lines: [], more: 0 });
+  assert.deepStrictEqual(rules.upcomingLines(undefined), { lines: [], more: 0 });
+  assert.deepStrictEqual(rules.upcomingLines(null), { lines: [], more: 0 });
+});
+
+test('a long list is cut off and the rest are counted', () => {
+  const many = Array.from({ length: 9 }, (_, i) => upcoming({ employeeName: `Person ${i}` }));
+  const r = rules.upcomingLines(many);
+  assert.strictEqual(r.lines.length, rules.MAX_UPCOMING_LINES);
+  assert.strictEqual(r.more, 9 - rules.MAX_UPCOMING_LINES);
+});
