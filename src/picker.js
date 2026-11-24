@@ -9,13 +9,9 @@ const updateSlot = document.getElementById('update-slot');
 const subtitleEl = document.getElementById('subtitle');
 const settingsPanel = document.getElementById('settings-panel');
 const settingsToggle = document.getElementById('settings-toggle');
-const chatOpen = document.getElementById('chat-open');
-const chatUnread = document.getElementById('chat-unread');
-const tasksOpen = document.getElementById('tasks-open');
-const tasksOverdue = document.getElementById('tasks-overdue');
 
 let portals = [];
-let upcomingLeave = { lines: [], more: '' };
+let upcomingLeave = { status: 'off', lines: [], more: '' };
 let openIds = new Set();
 let appVersion = '';
 let update = null;
@@ -370,28 +366,6 @@ function renderUpdate() {
   updateSlot.appendChild(btn);
 }
 
-// The chat button only exists when portals.json sets chat up, and carries the
-// unread count. A signed-out or unreachable chat still opens — the chat window
-// is where that gets explained and fixed.
-function renderChatBadge(badge) {
-  const b = badge || {};
-  chatOpen.hidden = !b.enabled;
-  const n = b.unreadTotal || 0;
-  chatUnread.hidden = n === 0;
-  chatUnread.textContent = n > 99 ? '99+' : String(n);
-  chatOpen.title = n > 0 ? `Chat — ${n} unread` : 'Chat';
-}
-
-// The Tasks button: admins only for now, with the overdue count on its corner.
-function renderTasksBadge(badge) {
-  const b = badge || {};
-  tasksOpen.hidden = !b.enabled;
-  const n = b.overdue || 0;
-  tasksOverdue.hidden = n === 0;
-  tasksOverdue.textContent = n > 99 ? '99+' : String(n);
-  tasksOpen.title = n > 0 ? `Tasks — ${n} overdue` : 'Tasks';
-}
-
 function render() {
   renderPortals();
   renderUpdate();
@@ -399,12 +373,15 @@ function render() {
   if (!settingsPanel.hidden) renderSettings();
 }
 
-// Who is on leave in the next two weeks, above the portal list. When
-// nobody is, the slot is left empty and takes no room (Dion 2026-11-24).
+// Who is on leave in the next two weeks, above the portal list. The strip
+// always takes the same room, so nothing below it moves when the list
+// arrives (Dion 2026-11-25): it says it is loading, then who is off, or that
+// nobody is. Only a Launcher with no leave set up has no strip.
 function renderUpcomingLeave() {
   leaveSlot.textContent = '';
+  const status = (upcomingLeave && upcomingLeave.status) || 'off';
+  if (status === 'off') return;
   const lines = (upcomingLeave && upcomingLeave.lines) || [];
-  if (lines.length === 0) return;
 
   // The whole strip is one button: it opens the leave requests in Controller.
   const box = document.createElement('button');
@@ -416,6 +393,14 @@ function renderUpcomingLeave() {
   title.className = 'leave__title';
   title.textContent = 'On leave, next 2 weeks';
   box.appendChild(title);
+
+  if (lines.length === 0) {
+    const note = document.createElement('div');
+    note.className = 'leave__note';
+    note.textContent =
+      status === 'loading' ? 'Loading leave…' : status === 'unavailable' ? 'Leave is not available right now' : 'No one on leave';
+    box.appendChild(note);
+  }
 
   for (const line of lines) {
     const row = document.createElement('div');
@@ -466,20 +451,12 @@ async function init() {
     if (opening) renderSettings();
   });
 
-  tasksOpen.addEventListener('click', () => window.acoms.openTasks());
-  renderTasksBadge(await window.acoms.getTasksBadge());
-  window.acoms.onTasksBadgeChanged(renderTasksBadge);
-
-  upcomingLeave = (await window.acoms.getUpcomingLeave()) || { lines: [], more: '' };
+  upcomingLeave = (await window.acoms.getUpcomingLeave()) || { status: 'off', lines: [], more: '' };
   renderUpcomingLeave();
   window.acoms.onUpcomingLeaveChanged((next) => {
-    upcomingLeave = next || { lines: [], more: '' };
+    upcomingLeave = next || { status: 'off', lines: [], more: '' };
     renderUpcomingLeave();
   });
-
-  chatOpen.addEventListener('click', () => window.acoms.openChat());
-  renderChatBadge(await window.acoms.getChatBadge());
-  window.acoms.onChatBadgeChanged(renderChatBadge);
 
   render();
 

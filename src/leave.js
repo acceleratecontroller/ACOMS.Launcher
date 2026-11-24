@@ -44,7 +44,8 @@ let timer = null;
 let polling = false;
 // Who is on leave in the next two weeks, as the picker shows it. Kept as it
 // was last read, so the picker has it the moment it opens.
-let upcoming = { lines: [], more: '' };
+// status: 'off' (no leave set up), 'loading', 'ready', 'unavailable'.
+let upcoming = { status: 'off', lines: [], more: '' };
 let listeners = [];
 
 function onUpcomingChanged(callback) {
@@ -211,9 +212,13 @@ async function poll() {
     const r = await request(config.feed);
     // Signed out or unreachable: leave what is on screen alone. A card that is
     // still open says so when its button is pressed.
-    if (!r.ok || !r.data) return;
+    if (!r.ok || !r.data) {
+      // Never read yet: stop saying "loading". A list already shown stays.
+      if (upcoming.status === 'loading') setUpcoming({ status: 'unavailable', lines: [], more: '' });
+      return;
+    }
     const quiet = store.inQuietHours();
-    setUpcoming(rules.upcomingLines(r.data.upcoming));
+    setUpcoming({ status: 'ready', ...rules.upcomingLines(r.data.upcoming) });
 
     const plan = rules.planCards({
       toDecide: Array.isArray(r.data.toDecide) ? r.data.toDecide : [],
@@ -262,6 +267,7 @@ function init({ portals = [], config: cfg = null, openPortalAt = null } = {}) {
   portal = portals.find((p) => p.id === cfg.portal) || null;
   if (!portal) return;
   config = { page: '/leave-requests', listPage: '/leave-requests', ...cfg };
+  upcoming = { status: 'loading', lines: [], more: '' };
   pagePortal = portals.find((p) => p.id === cfg.pagePortal) || portal;
   openPage = openPortalAt;
 
