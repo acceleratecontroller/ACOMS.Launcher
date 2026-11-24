@@ -390,6 +390,14 @@ body {
 }
 
 .leave {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 8px 12px;
@@ -551,4 +559,11 @@ body {
 
 .update__action:disabled:hover {
   background: transparent;
+}
+
+.leave:hover,
+.leave:focus-visible {
+  border-color: var(--accent);
+  background: var(--card-hover);
+  outline: none;
 }

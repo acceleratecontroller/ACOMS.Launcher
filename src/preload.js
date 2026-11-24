@@ -86,6 +86,8 @@ contextBridge.exposeInMainWorld('acoms', {
 
   // Who is on leave in the next two weeks: { lines: [{ name, when, pending }] (four at most), more: '' | 'plus 5 other people, next one Mon 14 Dec' }.
   getUpcomingLeave: () => ipcRenderer.invoke('leave:upcoming'),
+  // Open the leave requests list in Controller (a click on the strip).
+  openLeaveList: () => ipcRenderer.invoke('leave:open-list'),
   onUpcomingLeaveChanged: (callback) => {
     const listener = (_event, upcoming) => callback(upcoming);
     ipcRenderer.on('leave:upcoming-changed', listener);

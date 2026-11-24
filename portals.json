@@ -30,7 +30,8 @@
     "feed": "/api/launcher/leave",
     "act": "/api/leave-requests",
     "pagePortal": "acoms-os",
-    "page": "/my-leave"
+    "page": "/my-leave",
+    "listPage": "/leave-requests"
   },
   "portals": [
     {
