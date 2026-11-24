@@ -5,6 +5,7 @@
 
 const listEl = document.getElementById('portal-list');
 const quickNoteSlot = document.getElementById('quicknote-slot');
+const leaveSlot = document.getElementById('leave-slot');
 const updateSlot = document.getElementById('update-slot');
 const subtitleEl = document.getElementById('subtitle');
 const settingsPanel = document.getElementById('settings-panel');
@@ -16,6 +17,7 @@ const tasksOverdue = document.getElementById('tasks-overdue');
 
 let portals = [];
 let quickNote = null;
+let upcomingLeave = { lines: [], more: '' };
 let openIds = new Set();
 let appVersion = '';
 let update = null;
@@ -440,6 +442,50 @@ function render() {
   if (!settingsPanel.hidden) renderSettings();
 }
 
+// Who is on leave in the next two weeks, above the Quick Note strip. When
+// nobody is, the slot is left empty and takes no room (Dion 2026-11-24).
+function renderUpcomingLeave() {
+  leaveSlot.textContent = '';
+  const lines = (upcomingLeave && upcomingLeave.lines) || [];
+  if (lines.length === 0) return;
+
+  const box = document.createElement('div');
+  box.className = 'leave';
+  const title = document.createElement('div');
+  title.className = 'leave__title';
+  title.textContent = 'On leave, next 2 weeks';
+  box.appendChild(title);
+
+  for (const line of lines) {
+    const row = document.createElement('div');
+    row.className = 'leave__row';
+    const name = document.createElement('span');
+    name.className = 'leave__name';
+    name.textContent = line.name;
+    const when = document.createElement('span');
+    when.className = 'leave__when';
+    when.textContent = line.when;
+    row.appendChild(name);
+    row.appendChild(when);
+    if (line.pending) {
+      const tag = document.createElement('span');
+      tag.className = 'leave__pending';
+      tag.textContent = 'pending';
+      tag.title = 'Asked for, not yet approved';
+      row.appendChild(tag);
+    }
+    box.appendChild(row);
+  }
+  // A fifth line when more than four are off: how many others, and when the next starts.
+  if (upcomingLeave.more) {
+    const more = document.createElement('div');
+    more.className = 'leave__more';
+    more.textContent = upcomingLeave.more;
+    box.appendChild(more);
+  }
+  leaveSlot.appendChild(box);
+}
+
 async function init() {
   const data = await window.acoms.getPortals();
   portals = data.portals || [];
@@ -463,6 +509,13 @@ async function init() {
   tasksOpen.addEventListener('click', () => window.acoms.openTasks());
   renderTasksBadge(await window.acoms.getTasksBadge());
   window.acoms.onTasksBadgeChanged(renderTasksBadge);
+
+  upcomingLeave = (await window.acoms.getUpcomingLeave()) || { lines: [], more: '' };
+  renderUpcomingLeave();
+  window.acoms.onUpcomingLeaveChanged((next) => {
+    upcomingLeave = next || { lines: [], more: '' };
+    renderUpcomingLeave();
+  });
 
   chatOpen.addEventListener('click', () => window.acoms.openChat());
   renderChatBadge(await window.acoms.getChatBadge());

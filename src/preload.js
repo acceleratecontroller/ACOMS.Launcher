@@ -87,6 +87,14 @@ contextBridge.exposeInMainWorld('acoms', {
     return () => ipcRenderer.removeListener('chat:badge-changed', listener);
   },
 
+  // Who is on leave in the next two weeks: { lines: [{ name, when, pending }] (four at most), more: '' | 'plus 5 other people, next one Mon 14 Dec' }.
+  getUpcomingLeave: () => ipcRenderer.invoke('leave:upcoming'),
+  onUpcomingLeaveChanged: (callback) => {
+    const listener = (_event, upcoming) => callback(upcoming);
+    ipcRenderer.on('leave:upcoming-changed', listener);
+    return () => ipcRenderer.removeListener('leave:upcoming-changed', listener);
+  },
+
   // { muted: string[], quietFrom: "HH:MM"|null, quietTo: "HH:MM"|null }
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setMuted: (portalId, muted) => ipcRenderer.invoke('settings:set-muted', portalId, muted),

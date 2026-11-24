@@ -1110,6 +1110,8 @@ ipcMain.handle('chat:sign-in', () => {
 // only opens it and shows the overdue count.
 ipcMain.handle('tasks:open', () => openTasks());
 ipcMain.handle('tasks:badge', () => tasksBadge());
+// Who is on leave in the next two weeks, for the strip at the top of the picker.
+ipcMain.handle('leave:upcoming', () => leave.upcoming());
 ipcMain.handle('tasks:get', () => tasks.snapshot());
 ipcMain.handle('tasks:act', (_event, action) =>
   tasks.act(action && typeof action === 'object' ? JSON.parse(JSON.stringify(action)) : null)
@@ -1266,6 +1268,11 @@ if (!gotLock) {
     // Leave: a card with Approve / Reject for the approver a request is
     // flagged to, and a card back to the person with the answer. Its own
     // feed, so it does not depend on the task pop-up switch (as chat).
+    leave.onUpcomingChanged((upcoming) => {
+      if (pickerWindow && !pickerWindow.isDestroyed()) {
+        pickerWindow.webContents.send('leave:upcoming-changed', upcoming);
+      }
+    });
     leave.init({
       portals,
       config: leaveConfig,

@@ -159,6 +159,46 @@ function cardBounds(workArea, heights, index) {
   };
 }
 
+// At most four lines of leave in the picker (Dion 2026-11-24). Anything past
+// that becomes one more line: how many other people, and when the next of
+// them starts.
+const MAX_UPCOMING_LINES = 4;
+
+// "Who is on leave in the next two weeks", as the lines the picker shows:
+// a name and when. Never the type of leave. Nobody off = no lines, and the
+// picker then shows nothing at all for it.
+function upcomingLines(upcoming) {
+  const list = Array.isArray(upcoming) ? upcoming : [];
+  const all = list.map((u) => ({
+    name: u.employeeName || 'Someone',
+    when:
+      formatRange(u.startDate, u.endDate) +
+      (u.partDay ? ` (part day${typeof u.hours === 'number' ? `, ${u.hours} h` : ''})` : ''),
+    pending: u.pending === true,
+    startDate: u.startDate
+  }));
+  const shown = all.slice(0, MAX_UPCOMING_LINES);
+  const rest = all.slice(MAX_UPCOMING_LINES);
+  let more = '';
+  if (rest.length > 0) {
+    // "Other people" means people not already on the four lines above; someone
+    // shown who is also off again later is not another person.
+    const shownNames = new Set(shown.map((l) => l.name));
+    const others = new Set(rest.map((l) => l.name).filter((n) => !shownNames.has(n)));
+    // "Next one" is the next of those other people, not a later stretch for
+    // someone already listed.
+    const nextOther = rest.find((l) => others.has(l.name));
+    more =
+      others.size > 0
+        ? `plus ${others.size} other ${others.size === 1 ? 'person' : 'people'}, next one ${formatDay(nextOther.startDate)}`
+        : `plus ${rest.length} more, next one ${formatDay(rest[0].startDate)}`;
+  }
+  return {
+    lines: shown.map(({ name, when, pending }) => ({ name, when, pending })),
+    more
+  };
+}
+
 function clampHeight(h) {
   const n = Math.round(Number(h) || 0);
   return Math.min(CARD_MAX_HEIGHT, Math.max(CARD_MIN_HEIGHT, n));
@@ -179,5 +219,7 @@ module.exports = {
   answerContent,
   planAnswers,
   cardBounds,
-  clampHeight
+  clampHeight,
+  MAX_UPCOMING_LINES,
+  upcomingLines
 };
