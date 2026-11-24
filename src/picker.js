@@ -4,7 +4,6 @@
 // safe `window.acoms` bridge defined in preload.js.
 
 const listEl = document.getElementById('portal-list');
-const quickNoteSlot = document.getElementById('quicknote-slot');
 const leaveSlot = document.getElementById('leave-slot');
 const updateSlot = document.getElementById('update-slot');
 const subtitleEl = document.getElementById('subtitle');
@@ -16,53 +15,12 @@ const tasksOpen = document.getElementById('tasks-open');
 const tasksOverdue = document.getElementById('tasks-overdue');
 
 let portals = [];
-let quickNote = null;
 let upcomingLeave = { lines: [], more: '' };
 let openIds = new Set();
 let appVersion = '';
 let update = null;
 let notifications = {};
 let settings = { muted: [], quietFrom: null, quietTo: null };
-
-function makeQuickNoteHalf(icon, label, action) {
-  const btn = document.createElement('button');
-  btn.className = `quicknote__half quicknote__half--${action}`;
-  btn.type = 'button';
-  btn.title = label;
-
-  const iconEl = document.createElement('span');
-  iconEl.className = 'quicknote__icon';
-  iconEl.textContent = icon;
-
-  const labelEl = document.createElement('span');
-  labelEl.className = 'quicknote__label';
-  labelEl.textContent = label;
-
-  btn.appendChild(iconEl);
-  btn.appendChild(labelEl);
-
-  btn.addEventListener('click', () => {
-    window.acoms.openQuickNote(action);
-  });
-  return btn;
-}
-
-function renderQuickNote() {
-  quickNoteSlot.innerHTML = '';
-  if (!quickNote) return;
-
-  const strip = document.createElement('div');
-  strip.className = 'quicknote';
-
-  if (quickNote.hasNew) {
-    strip.appendChild(makeQuickNoteHalf('📝', quickNote.newLabel || 'New Note', 'new'));
-  }
-  if (quickNote.hasView) {
-    strip.appendChild(makeQuickNoteHalf('🗂️', quickNote.viewLabel || 'View Notes', 'view'));
-  }
-
-  quickNoteSlot.appendChild(strip);
-}
 
 // What sits on the right of a portal card, if anything.
 //   a count   — that many things are waiting on you
@@ -435,14 +393,13 @@ function renderTasksBadge(badge) {
 }
 
 function render() {
-  renderQuickNote();
   renderPortals();
   renderUpdate();
   renderSubtitle();
   if (!settingsPanel.hidden) renderSettings();
 }
 
-// Who is on leave in the next two weeks, above the Quick Note strip. When
+// Who is on leave in the next two weeks, above the portal list. When
 // nobody is, the slot is left empty and takes no room (Dion 2026-11-24).
 function renderUpcomingLeave() {
   leaveSlot.textContent = '';
@@ -489,7 +446,6 @@ function renderUpcomingLeave() {
 async function init() {
   const data = await window.acoms.getPortals();
   portals = data.portals || [];
-  quickNote = data.quickNote || null;
   openIds = new Set(data.openIds || []);
 
   const info = await window.acoms.getAppInfo();
@@ -523,7 +479,7 @@ async function init() {
 
   render();
 
-  // Live-update the open indicators as portal / quick-note windows open and close.
+  // Live-update the open indicators as portal windows open and close.
   window.acoms.onOpenStateChanged((ids) => {
     openIds = new Set(ids || []);
     render();

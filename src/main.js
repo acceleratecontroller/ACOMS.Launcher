@@ -250,9 +250,9 @@ function attachLinkHandling(contents) {
 // Picker window
 // ---------------------------------------------------------------------------
 const PICKER_WIDTH = 420;
-// Tall enough to show the Quick Note strip plus the current portals without a
-// scrollbar; it only scrolls if you add a lot more portals.
-const PICKER_HEIGHT = 700;
+// Tall enough for a full leave strip plus seven portals without a
+// scrollbar; it only scrolls if you add more portals.
+const PICKER_HEIGHT = 760;
 // Room left below the picker for an auto-hidden macOS Dock to slide up over,
 // so the picker sits above it rather than behind it.
 const AUTO_HIDE_DOCK_CLEARANCE = 96;
