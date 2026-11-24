@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Same lock-down as chat and tasks: our own files only, no remote loads. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:;"
+    />
+    <title>ACOMS Calendar</title>
+    <link rel="stylesheet" href="calendar.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="top__nav">
+        <button id="prev" class="btn" type="button" title="Previous month" aria-label="Previous month">&#x2039;</button>
+        <button id="next" class="btn" type="button" title="Next month" aria-label="Next month">&#x203A;</button>
+        <h1 id="title"></h1>
+      </div>
+      <div class="top__side">
+        <span id="status" class="status" aria-live="polite"></span>
+        <button id="today" class="btn btn--text" type="button">Today</button>
+      </div>
+    </header>
+
+    <div class="legend">
+      <span class="chip chip--holiday">Public holiday</span>
+      <span class="chip chip--rdo">RDO</span>
+      <span class="chip chip--event">Company event</span>
+      <span class="chip chip--leave">On leave</span>
+      <span class="chip chip--pending">Leave pending</span>
+    </div>
+
+    <main class="main">
+      <div class="grid">
+        <div class="dow">
+          <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+        </div>
+        <div id="weeks" class="weeks"></div>
+      </div>
+      <aside id="day" class="day" aria-live="polite"></aside>
+    </main>
+
+    <script src="calendar-rules.js"></script>
+    <script src="calendar.js"></script>
+  </body>
+</html>

@@ -88,6 +88,9 @@ contextBridge.exposeInMainWorld('acoms', {
   // Also `all`: [{ name, items: [{ when, pending }] }], every person and stretch;
   // a line carries `extra`, how many more stretches that person has.
   getUpcomingLeave: () => ipcRenderer.invoke('leave:upcoming'),
+  // The Calendar window (local, read-only). Enabled when portals.json sets it up.
+  openCalendar: () => ipcRenderer.invoke('calendar:open'),
+  calendarEnabled: () => ipcRenderer.invoke('calendar:enabled'),
   // Open the leave requests list in Controller (a click on the strip).
   openLeaveList: () => ipcRenderer.invoke('leave:open-list'),
   onUpcomingLeaveChanged: (callback) => {

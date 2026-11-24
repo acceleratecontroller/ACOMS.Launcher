@@ -1,0 +1,275 @@
+/* The Calendar window: a month at a time, read-only. Colours as the picker. */
+:root {
+  --bg: #0f1419;
+  --card: #1b2530;
+  --card-hover: #233040;
+  --text: #e8eef5;
+  --muted: #8a99a8;
+  --accent: #3b82f6;
+  --border: #2a3744;
+  --holiday: #ef4444;
+  --rdo: #3b82f6;
+  --event: #a855f7;
+  --leave: #22c55e;
+  --pending: #f59e0b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 8px;
+}
+
+.top__nav,
+.top__side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.top h1 {
+  margin: 0 0 0 6px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  padding: 6px 11px;
+  cursor: pointer;
+}
+
+.btn--text {
+  font-size: 13px;
+  padding: 7px 12px;
+}
+
+.btn:hover,
+.btn:focus-visible {
+  border-color: var(--accent);
+  background: var(--card-hover);
+  outline: none;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 16px 10px;
+}
+
+.main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.grid {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  padding-bottom: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dow span {
+  padding-left: 6px;
+}
+
+.weeks {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.cell {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 5px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cell:hover,
+.cell:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.cell--out {
+  background: transparent;
+  color: var(--muted);
+}
+
+.cell--out .chip {
+  opacity: 0.55;
+}
+
+.cell--weekend:not(.cell--out) {
+  background: #151d26;
+}
+
+.cell--picked {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.cell__num {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.cell--today .cell__num {
+  align-self: flex-start;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  padding: 0 6px;
+}
+
+.chip {
+  display: block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  line-height: 1.45;
+  border-radius: 4px;
+  padding: 0 5px;
+  border-left: 3px solid var(--muted);
+  background: rgba(138, 153, 168, 0.14);
+}
+
+.legend .chip {
+  display: inline-block;
+}
+
+.chip--holiday {
+  border-left-color: var(--holiday);
+  background: rgba(239, 68, 68, 0.16);
+}
+
+.chip--rdo {
+  border-left-color: var(--rdo);
+  background: rgba(59, 130, 246, 0.16);
+}
+
+.chip--event {
+  border-left-color: var(--event);
+  background: rgba(168, 85, 247, 0.16);
+}
+
+.chip--leave {
+  border-left-color: var(--leave);
+  background: rgba(34, 197, 94, 0.14);
+}
+
+.chip--pending {
+  border-left: 3px dashed var(--pending);
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.cell__more {
+  font-size: 10px;
+  color: var(--muted);
+  padding-left: 5px;
+}
+
+/* The picked day, in full, beside the month. */
+.day {
+  flex: 0 0 230px;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.day h2 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.day .chip {
+  white-space: normal;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 3px 7px;
+  margin-bottom: 5px;
+}
+
+.day__none {
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .day {
+    display: none;
+  }
+}

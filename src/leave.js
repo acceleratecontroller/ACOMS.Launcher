@@ -88,6 +88,16 @@ function openLeavePage() {
   openPage(pagePortal.id, new URL(config.page, pagePortal.url).toString());
 }
 
+// One window of the Calendar for the Calendar window: { ok, data } | { ok: false, message }.
+async function calendarRange(from, to) {
+  const isDay = (v) => typeof v === 'string' && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(v);
+  if (!portal || !config.calendar) return { ok: false, message: 'The calendar is not set up on this Launcher.' };
+  if (!isDay(from) || !isDay(to)) return { ok: false, message: 'Could not load the calendar.' };
+  const r = await request(`${config.calendar}?from=${from}&to=${to}`);
+  if (!r.ok) return { ok: false, message: r.signIn ? 'Sign in to ACOMS.Controller to see the calendar.' : 'Could not load the calendar.' };
+  return { ok: true, data: r.data };
+}
+
 // The picker's "On leave" strip: the leave requests list in Controller, where
 // the detail is (Dion 2026-11-24). The cards still open ACOMS.OS.
 function openLeaveList() {
@@ -340,4 +350,4 @@ function dispose() {
   for (const key of [...cards.keys()]) closeCard(key);
 }
 
-module.exports = { init, dispose, poll, onUpcomingChanged, upcoming: () => upcoming, openLeaveList };
+module.exports = { init, dispose, poll, onUpcomingChanged, upcoming: () => upcoming, openLeaveList, calendarRange, hasCalendar: () => Boolean(portal && config.calendar) };

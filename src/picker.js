@@ -537,6 +537,11 @@ async function init() {
   renderKeyDates();
     if (!leavePanel.hidden) renderLeavePanel();
   });
+  // The Calendar window's button, when this Launcher has a calendar set up.
+  const calendarOpen = document.getElementById('calendar-open');
+  calendarOpen.hidden = !(await window.acoms.calendarEnabled());
+  calendarOpen.addEventListener('click', () => window.acoms.openCalendar());
+
   document.getElementById('leave-panel-close').addEventListener('click', () => {
     leavePanel.hidden = true;
   });
