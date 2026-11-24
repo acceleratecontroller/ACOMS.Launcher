@@ -29,7 +29,11 @@ const popup = require('./popup');
 const rules = require('./leave-rules');
 
 const POLL_MS = 60 * 1000;
-const FIRST_POLL_DELAY_MS = 12 * 1000;
+// Straight after start, so the picker has the leave list when it is first
+// opened (it was 12 seconds, and the strip sat on "Loading"; Dion 2026-11-25).
+const FIRST_POLL_DELAY_MS = 1500;
+// If that first read fails (the sign-in is still being restored), one more go.
+const FIRST_RETRY_MS = 8 * 1000;
 const REQUEST_TIMEOUT_MS = 15 * 1000;
 const SEEN_SCOPE = 'leave-answers';
 
@@ -214,7 +218,10 @@ async function poll() {
     // still open says so when its button is pressed.
     if (!r.ok || !r.data) {
       // Never read yet: stop saying "loading". A list already shown stays.
-      if (upcoming.status === 'loading') setUpcoming({ status: 'unavailable', lines: [], more: '', all: [] });
+      if (upcoming.status === 'loading') {
+        setUpcoming({ status: 'unavailable', lines: [], more: '', all: [] });
+        setTimeout(poll, FIRST_RETRY_MS);
+      }
       return;
     }
     const quiet = store.inQuietHours();
