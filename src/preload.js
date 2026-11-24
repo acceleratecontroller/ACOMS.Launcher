@@ -14,9 +14,6 @@ contextBridge.exposeInMainWorld('acoms', {
   // whatever is open instead of focusing it.
   openPortal: (id, opts) => ipcRenderer.invoke('portal:open', id, opts || {}),
 
-  // Open (or focus) the Quick Notes window. action is 'new' or 'view'.
-  openQuickNote: (action) => ipcRenderer.invoke('quicknote:open', action),
-
   // Subscribe to changes in which portals are currently open. Returns an
   // unsubscribe function. The callback receives an array of open portal ids.
   onOpenStateChanged: (callback) => {
