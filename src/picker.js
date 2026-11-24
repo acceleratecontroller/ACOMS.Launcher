@@ -406,8 +406,12 @@ function renderUpcomingLeave() {
   const lines = (upcomingLeave && upcomingLeave.lines) || [];
   if (lines.length === 0) return;
 
-  const box = document.createElement('div');
+  // The whole strip is one button: it opens the leave requests in Controller.
+  const box = document.createElement('button');
+  box.type = 'button';
   box.className = 'leave';
+  box.title = 'Open leave requests';
+  box.addEventListener('click', () => window.acoms.openLeaveList());
   const title = document.createElement('div');
   title.className = 'leave__title';
   title.textContent = 'On leave, next 2 weeks';

@@ -83,6 +83,13 @@ function openLeavePage() {
   openPage(pagePortal.id, new URL(config.page, pagePortal.url).toString());
 }
 
+// The picker's "On leave" strip: the leave requests list in Controller, where
+// the detail is (Dion 2026-11-24). The cards still open ACOMS.OS.
+function openLeaveList() {
+  if (!openPage || !portal) return;
+  openPage(portal.id, absolute(config.listPage));
+}
+
 // { ok, data } | { ok: false, signIn } | { ok: false, message }
 async function request(relative, { method = 'GET', body } = {}) {
   const controller = new AbortController();
@@ -254,7 +261,7 @@ function init({ portals = [], config: cfg = null, openPortalAt = null } = {}) {
   if (!cfg || !cfg.portal || !cfg.feed || !cfg.act) return;
   portal = portals.find((p) => p.id === cfg.portal) || null;
   if (!portal) return;
-  config = { page: '/leave-requests', ...cfg };
+  config = { page: '/leave-requests', listPage: '/leave-requests', ...cfg };
   pagePortal = portals.find((p) => p.id === cfg.pagePortal) || portal;
   openPage = openPortalAt;
 
@@ -320,4 +327,4 @@ function dispose() {
   for (const key of [...cards.keys()]) closeCard(key);
 }
 
-module.exports = { init, dispose, poll, onUpcomingChanged, upcoming: () => upcoming };
+module.exports = { init, dispose, poll, onUpcomingChanged, upcoming: () => upcoming, openLeaveList };

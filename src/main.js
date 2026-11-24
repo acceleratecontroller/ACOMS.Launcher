@@ -124,7 +124,8 @@ function loadConfig() {
             feed: leaveRaw.feed,
             act: leaveRaw.act,
             page: typeof leaveRaw.page === 'string' ? leaveRaw.page : undefined,
-            pagePortal: typeof leaveRaw.pagePortal === 'string' ? leaveRaw.pagePortal : undefined
+            pagePortal: typeof leaveRaw.pagePortal === 'string' ? leaveRaw.pagePortal : undefined,
+            ...(typeof leaveRaw.listPage === 'string' ? { listPage: leaveRaw.listPage } : {})
           }
         : null;
     return { portals: list, quickNote: qn, chat: chatCfg, tasks: tasksCfg, leave: leaveCfg };
@@ -1112,6 +1113,7 @@ ipcMain.handle('tasks:open', () => openTasks());
 ipcMain.handle('tasks:badge', () => tasksBadge());
 // Who is on leave in the next two weeks, for the strip at the top of the picker.
 ipcMain.handle('leave:upcoming', () => leave.upcoming());
+ipcMain.handle('leave:open-list', () => leave.openLeaveList());
 ipcMain.handle('tasks:get', () => tasks.snapshot());
 ipcMain.handle('tasks:act', (_event, action) =>
   tasks.act(action && typeof action === 'object' ? JSON.parse(JSON.stringify(action)) : null)
