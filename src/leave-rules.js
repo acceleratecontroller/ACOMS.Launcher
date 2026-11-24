@@ -213,6 +213,20 @@ function upcomingLines(upcoming, thisYear = new Date().getFullYear()) {
   };
 }
 
+// The two dates beside the picker's cog: the next RDO, and the next public
+// holiday when Controller sends one (it only does within a month). Short
+// text; null for what there is nothing to say about.
+function keyDates(dates, thisYear = new Date().getFullYear()) {
+  const d = dates && typeof dates === 'object' ? dates : {};
+  const yearOf = (ymd) => (Number(String(ymd).slice(0, 4)) !== thisYear ? ` ${String(ymd).slice(0, 4)}` : '');
+  const isDay = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const h = d.nextHoliday && typeof d.nextHoliday === 'object' && isDay(d.nextHoliday.date) ? d.nextHoliday : null;
+  return {
+    rdo: isDay(d.nextRdo) ? formatDay(d.nextRdo) + yearOf(d.nextRdo) : null,
+    holiday: h ? { name: String(h.name || 'Public holiday'), when: formatDay(h.date) + yearOf(h.date) } : null
+  };
+}
+
 function clampHeight(h) {
   const n = Math.round(Number(h) || 0);
   return Math.min(CARD_MAX_HEIGHT, Math.max(CARD_MIN_HEIGHT, n));
@@ -235,5 +249,6 @@ module.exports = {
   cardBounds,
   clampHeight,
   MAX_UPCOMING_LINES,
+  keyDates,
   upcomingLines
 };

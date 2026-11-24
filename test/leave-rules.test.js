@@ -298,3 +298,20 @@ test('leave in another year carries its year, in the strip and in the fifth line
   ];
   assert.strictEqual(lines2026(five).more, 'plus 1 other person, next one Tue 30 Mar 2027');
 });
+
+// ── Next RDO and next public holiday (beside the cog) ──────────────────────
+
+test('next RDO and holiday read as short dates', () => {
+  const r = rules.keyDates({ nextRdo: '2026-11-27', nextHoliday: { date: '2026-12-25', name: 'Christmas Day' } }, 2026);
+  assert.deepStrictEqual(r, { rdo: 'Fri 27 Nov', holiday: { name: 'Christmas Day', when: 'Fri 25 Dec' } });
+});
+
+test('no holiday within a month: only the RDO; a date in another year carries its year', () => {
+  assert.deepStrictEqual(rules.keyDates({ nextRdo: '2027-01-08', nextHoliday: null }, 2026), { rdo: 'Fri 8 Jan 2027', holiday: null });
+});
+
+test('nothing sent, or rubbish: nothing shown', () => {
+  for (const bad of [undefined, null, {}, { nextRdo: 'soon', nextHoliday: { date: 'x' } }]) {
+    assert.deepStrictEqual(rules.keyDates(bad, 2026), { rdo: null, holiday: null });
+  }
+});
