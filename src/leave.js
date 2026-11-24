@@ -34,6 +34,10 @@ const REQUEST_TIMEOUT_MS = 15 * 1000;
 const SEEN_SCOPE = 'leave-answers';
 
 let portal = null; // the portal that hosts the routes (Controller)
+// Where a card's link opens. ACOMS.OS, not Controller: the Leave page there
+// is the one everybody has, and not everyone should be in Controller
+// (Dion 2026-11-24). Falls back to the routes' portal if it is not set.
+let pagePortal = null;
 let config = null; // { portal, feed, act, page }
 let openPage = null; // injected by main.js: (portalId, url) => void
 let timer = null;
@@ -52,6 +56,11 @@ function hiddenKeys(now = Date.now()) {
 
 function absolute(relative) {
   return new URL(relative, portal.url).toString();
+}
+
+function openLeavePage() {
+  if (!openPage || !pagePortal) return;
+  openPage(pagePortal.id, new URL(config.page, pagePortal.url).toString());
 }
 
 // { ok, data } | { ok: false, signIn } | { ok: false, message }
@@ -87,8 +96,13 @@ async function request(relative, { method = 'GET', body } = {}) {
 
 // ── Card windows ───────────────────────────────────────────────────────────
 
+// The screen the cards sit on: the one the mouse is on when the first card
+// opens, so it is seen on a desk with several screens. It stays put while
+// any card is open; cards do not chase the mouse.
+let cardArea = null;
+
 function layout() {
-  const workArea = screen.getPrimaryDisplay().workArea;
+  const workArea = cardArea || screen.getPrimaryDisplay().workArea;
   const list = [...cards.values()];
   const heights = list.map((c) => c.height);
   list.forEach((card, i) => {
@@ -107,6 +121,13 @@ function closeCard(key) {
 
 function openCard(content) {
   if (cards.has(content.key)) return;
+  if (cards.size === 0) {
+    try {
+      cardArea = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+    } catch {
+      cardArea = null;
+    }
+  }
   const win = new BrowserWindow({
     width: rules.CARD_WIDTH,
     height: rules.CARD_MIN_HEIGHT,
@@ -193,7 +214,7 @@ async function poll() {
         badge: 'L',
         // An answer is news the person asked for: it stays until they look.
         sticky: true,
-        onClick: () => openPage && openPage(portal.id, absolute(config.page))
+        onClick: () => openLeavePage()
       });
     }
   } finally {
@@ -213,6 +234,7 @@ function init({ portals = [], config: cfg = null, openPortalAt = null } = {}) {
   portal = portals.find((p) => p.id === cfg.portal) || null;
   if (!portal) return;
   config = { page: '/leave-requests', ...cfg };
+  pagePortal = portals.find((p) => p.id === cfg.pagePortal) || portal;
   openPage = openPortalAt;
 
   // The card says how tall it needs to be (its text, then the reject box).
@@ -247,7 +269,7 @@ function init({ portals = [], config: cfg = null, openPortalAt = null } = {}) {
   });
 
   ipcMain.on('leave-card:open-page', () => {
-    if (openPage) openPage(portal.id, absolute(config.page));
+    openLeavePage();
   });
 
   // Hidden until the next poll; the request is still waiting and comes back.
@@ -258,7 +280,13 @@ function init({ portals = [], config: cfg = null, openPortalAt = null } = {}) {
     closeCard(key);
   });
 
+  // A screen unplugged or rearranged: fall back to the primary one.
+  const screensChanged = () => {
+    cardArea = null;
+    layout();
+  };
   screen.on('display-metrics-changed', layout);
+  screen.on('display-removed', screensChanged);
   setTimeout(() => {
     poll();
     schedule();
