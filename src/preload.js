@@ -85,6 +85,8 @@ contextBridge.exposeInMainWorld('acoms', {
   },
 
   // Upcoming leave, soonest first: { lines: [{ name, when, pending }] (four at most), more: '' | 'plus 5 other people, next one Mon 14 Dec' }.
+  // Also `all`: [{ name, items: [{ when, pending }] }], every person and stretch;
+  // a line carries `extra`, how many more stretches that person has.
   getUpcomingLeave: () => ipcRenderer.invoke('leave:upcoming'),
   // Open the leave requests list in Controller (a click on the strip).
   openLeaveList: () => ipcRenderer.invoke('leave:open-list'),
