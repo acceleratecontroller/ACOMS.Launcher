@@ -42,7 +42,7 @@ let config = null; // { portal, feed, act, page }
 let openPage = null; // injected by main.js: (portalId, url) => void
 let timer = null;
 let polling = false;
-// Who is on leave in the next two weeks, as the picker shows it. Kept as it
+// Upcoming leave, soonest first, as the picker shows it. Kept as it
 // was last read, so the picker has it the moment it opens.
 // status: 'off' (no leave set up), 'loading', 'ready', 'unavailable'.
 let upcoming = { status: 'off', lines: [], more: '' };
