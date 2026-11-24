@@ -123,7 +123,8 @@ function loadConfig() {
             portal: leaveRaw.portal,
             feed: leaveRaw.feed,
             act: leaveRaw.act,
-            page: typeof leaveRaw.page === 'string' ? leaveRaw.page : undefined
+            page: typeof leaveRaw.page === 'string' ? leaveRaw.page : undefined,
+            pagePortal: typeof leaveRaw.pagePortal === 'string' ? leaveRaw.pagePortal : undefined
           }
         : null;
     return { portals: list, quickNote: qn, chat: chatCfg, tasks: tasksCfg, leave: leaveCfg };

@@ -8,7 +8,7 @@
   "_chatJobsComment": "'chat.jobs' (optional): an A-number typed in a chat message (A1174, A1016B) links to <that portal's url><path><number>. Remove it and A-numbers stay plain text.",
   "_tasksComment": "'tasks' (optional): the local Tasks window and its tray icon (src/tasks.js). 'portal' hosts GET <sync>, the one call that feeds the window; 'jobs' is where a task's A-number links (as chat.jobs); 'email' is the portal a task's source email opens in. Admins only for now. Remove the block and there is no Tasks window.",
   "_localOnlyComment": "'localOnly': true marks a portal that runs on this computer (an http://127.0.0.1 address), not on Vercel. Its tile shows only while it answers on 'probe' - so the Brain Console appears on the computers that run it (Dion's, JD's) and nowhere else. See src/local-portals.js.",
-  "_leaveComment": "'leave' (optional): the leave request cards (src/leave.js). 'portal' hosts GET <feed> (the requests flagged to the signed-in person and the answers to their own) and POST <act> (the decision); 'page' is where a card's link opens. Remove the block and there are no leave cards.",
+  "_leaveComment": "'leave' (optional): the leave request cards (src/leave.js). 'portal' hosts GET <feed> (the requests flagged to the signed-in person and the answers to their own) and POST <act> (the decision). A card's link opens <page> on 'pagePortal': ACOMS.OS, where everyone has a Leave page, not Controller. Remove the block and there are no leave cards.",
   "chat": {
     "portal": "acoms-controller",
     "sync": "/api/chat/sync",
@@ -30,7 +30,8 @@
     "portal": "acoms-controller",
     "feed": "/api/launcher/leave",
     "act": "/api/leave-requests",
-    "page": "/leave-requests"
+    "pagePortal": "acoms-os",
+    "page": "/my-leave"
   },
   "quickNote": {
     "tagline": "Jot or browse Controller notes",
