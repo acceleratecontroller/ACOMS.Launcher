@@ -125,7 +125,8 @@ function loadConfig() {
             act: leaveRaw.act,
             page: typeof leaveRaw.page === 'string' ? leaveRaw.page : undefined,
             pagePortal: typeof leaveRaw.pagePortal === 'string' ? leaveRaw.pagePortal : undefined,
-            ...(typeof leaveRaw.listPage === 'string' ? { listPage: leaveRaw.listPage } : {})
+            ...(typeof leaveRaw.listPage === 'string' ? { listPage: leaveRaw.listPage } : {}),
+            ...(typeof leaveRaw.calendar === 'string' ? { calendar: leaveRaw.calendar } : {})
           }
         : null;
     return { portals: list, quickNote: qn, chat: chatCfg, tasks: tasksCfg, leave: leaveCfg };
@@ -831,6 +832,44 @@ function sendTasksCommand(command) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Calendar window
+// ---------------------------------------------------------------------------
+// A local page, as chat and tasks are, so it opens at once: a month of public
+// holidays, RDOs, company events and who is on leave. Read-only.
+let calendarWindow = null;
+
+function openCalendar() {
+  if (!leave.hasCalendar()) return;
+  if (calendarWindow && !calendarWindow.isDestroyed()) {
+    bringForward(calendarWindow);
+    hidePicker();
+    return;
+  }
+  calendarWindow = new BrowserWindow({
+    width: 1040,
+    height: 720,
+    minWidth: 560,
+    minHeight: 460,
+    title: 'ACOMS Calendar',
+    backgroundColor: '#0f1419',
+    webPreferences: {
+      preload: path.join(__dirname, 'calendar-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  if (process.platform !== 'darwin') calendarWindow.removeMenu();
+  attachLinkHandling(calendarWindow.webContents);
+  calendarWindow.webContents.on('will-navigate', (event) => event.preventDefault());
+  calendarWindow.loadFile(path.join(__dirname, 'calendar.html'));
+  calendarWindow.on('closed', () => {
+    calendarWindow = null;
+  });
+  hidePicker();
+}
+
 function openTasks(command) {
   if (!tasksConfig) return;
 
@@ -1126,6 +1165,10 @@ ipcMain.handle('tasks:badge', () => tasksBadge());
 // Upcoming leave, soonest first, for the strip at the top of the picker.
 ipcMain.handle('leave:upcoming', () => leave.upcoming());
 ipcMain.handle('leave:open-list', () => leave.openLeaveList());
+// The Calendar window: opened from the picker, fed a range of days at a time.
+ipcMain.handle('calendar:open', () => openCalendar());
+ipcMain.handle('calendar:enabled', () => leave.hasCalendar());
+ipcMain.handle('calendar:range', (_event, from, to) => leave.calendarRange(from, to));
 ipcMain.handle('tasks:get', () => tasks.snapshot());
 ipcMain.handle('tasks:act', (_event, action) =>
   tasks.act(action && typeof action === 'object' ? JSON.parse(JSON.stringify(action)) : null)

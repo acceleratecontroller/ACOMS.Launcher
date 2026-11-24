@@ -31,7 +31,8 @@
     "act": "/api/leave-requests",
     "pagePortal": "acoms-os",
     "page": "/my-leave",
-    "listPage": "/leave-requests"
+    "listPage": "/leave-requests",
+    "calendar": "/api/launcher/calendar"
   },
   "portals": [
     {

@@ -705,3 +705,15 @@ body {
   background: var(--card-hover);
   outline: none;
 }
+
+/* An icon button that holds a drawn icon, not a character. */
+.iconbtn--svg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+}
+
+.iconbtn--svg[hidden] {
+  display: none;
+}
