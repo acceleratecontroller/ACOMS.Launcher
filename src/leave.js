@@ -44,7 +44,7 @@ let timer = null;
 let polling = false;
 // Who is on leave in the next two weeks, as the picker shows it. Kept as it
 // was last read, so the picker has it the moment it opens.
-let upcoming = { lines: [], more: 0 };
+let upcoming = { lines: [], more: '' };
 let listeners = [];
 
 function onUpcomingChanged(callback) {

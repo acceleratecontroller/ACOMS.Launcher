@@ -17,7 +17,7 @@ const tasksOverdue = document.getElementById('tasks-overdue');
 
 let portals = [];
 let quickNote = null;
-let upcomingLeave = { lines: [], more: 0 };
+let upcomingLeave = { lines: [], more: '' };
 let openIds = new Set();
 let appVersion = '';
 let update = null;
@@ -476,10 +476,11 @@ function renderUpcomingLeave() {
     }
     box.appendChild(row);
   }
-  if (upcomingLeave.more > 0) {
+  // A fifth line when more than four are off: how many others, and when the next starts.
+  if (upcomingLeave.more) {
     const more = document.createElement('div');
     more.className = 'leave__more';
-    more.textContent = `and ${upcomingLeave.more} more`;
+    more.textContent = upcomingLeave.more;
     box.appendChild(more);
   }
   leaveSlot.appendChild(box);
@@ -509,10 +510,10 @@ async function init() {
   renderTasksBadge(await window.acoms.getTasksBadge());
   window.acoms.onTasksBadgeChanged(renderTasksBadge);
 
-  upcomingLeave = (await window.acoms.getUpcomingLeave()) || { lines: [], more: 0 };
+  upcomingLeave = (await window.acoms.getUpcomingLeave()) || { lines: [], more: '' };
   renderUpcomingLeave();
   window.acoms.onUpcomingLeaveChanged((next) => {
-    upcomingLeave = next || { lines: [], more: 0 };
+    upcomingLeave = next || { lines: [], more: '' };
     renderUpcomingLeave();
   });
 

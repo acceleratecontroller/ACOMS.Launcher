@@ -87,7 +87,7 @@ contextBridge.exposeInMainWorld('acoms', {
     return () => ipcRenderer.removeListener('chat:badge-changed', listener);
   },
 
-  // Who is on leave in the next two weeks: { lines: [{ name, when, pending }], more }.
+  // Who is on leave in the next two weeks: { lines: [{ name, when, pending }] (four at most), more: '' | 'plus 5 other people, next one Mon 14 Dec' }.
   getUpcomingLeave: () => ipcRenderer.invoke('leave:upcoming'),
   onUpcomingLeaveChanged: (callback) => {
     const listener = (_event, upcoming) => callback(upcoming);
