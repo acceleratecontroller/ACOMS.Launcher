@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self';"
+    />
+    <title>Leave request</title>
+    <link rel="stylesheet" href="leave-card.css" />
+  </head>
+  <body>
+    <div id="card" class="card">
+      <div class="head">
+        <span class="label">Leave request</span>
+        <button id="later" class="later" type="button" title="Hide for now. It comes back while it is still waiting.">Later</button>
+      </div>
+      <div id="who" class="who"></div>
+      <div id="lines" class="lines"></div>
+      <div id="note" class="note" hidden></div>
+      <div id="others" class="others" hidden></div>
+      <div id="escalated" class="escalated" hidden>Waiting more than 2 days, so it has come to you as well.</div>
+
+      <div id="buttons" class="buttons">
+        <button id="approve" class="approve" type="button">Approve</button>
+        <button id="reject" class="reject" type="button">Reject</button>
+      </div>
+
+      <div id="rejecting" class="rejecting" hidden>
+        <label id="why-label" for="why"></label>
+        <textarea id="why" rows="2" maxlength="2000"></textarea>
+        <div class="buttons">
+          <button id="send-reject" class="reject solid" type="button" disabled>Reject</button>
+          <button id="back" class="back" type="button">Back</button>
+        </div>
+      </div>
+
+      <div id="message" class="message" hidden></div>
+      <button id="open" class="open" type="button">Open leave requests</button>
+    </div>
+    <script src="leave-card-window.js"></script>
+  </body>
+</html>

@@ -17,6 +17,7 @@ const {
 const { normaliseLocal, visiblePortals, probeLocal } = require('./local-portals');
 const chat = require('./chat');
 const tasks = require('./tasks');
+const leave = require('./leave');
 const chatFiles = require('./chat-files');
 const popup = require('./popup');
 const autostart = require('./autostart');
@@ -110,10 +111,25 @@ function loadConfig() {
             email: typeof tasksRaw.email === 'string' ? tasksRaw.email : undefined
           }
         : null;
-    return { portals: list, quickNote: qn, chat: chatCfg, tasks: tasksCfg };
+    // Optional leave block: the leave request cards (leave.js). No block, no cards.
+    const leaveRaw = parsed.leave;
+    const leaveCfg =
+      leaveRaw &&
+      typeof leaveRaw === 'object' &&
+      typeof leaveRaw.portal === 'string' &&
+      typeof leaveRaw.feed === 'string' &&
+      typeof leaveRaw.act === 'string'
+        ? {
+            portal: leaveRaw.portal,
+            feed: leaveRaw.feed,
+            act: leaveRaw.act,
+            page: typeof leaveRaw.page === 'string' ? leaveRaw.page : undefined
+          }
+        : null;
+    return { portals: list, quickNote: qn, chat: chatCfg, tasks: tasksCfg, leave: leaveCfg };
   } catch (err) {
     console.error('Failed to load portals.json:', err.message);
-    return { portals: [], quickNote: null, chat: null, tasks: null };
+    return { portals: [], quickNote: null, chat: null, tasks: null, leave: null };
   }
 }
 
@@ -124,6 +140,7 @@ let portals = [];
 let quickNote = null;
 let chatConfig = null;
 let tasksConfig = null;
+let leaveConfig = null;
 
 // ---------------------------------------------------------------------------
 // Window bookkeeping
@@ -1167,6 +1184,7 @@ if (!gotLock) {
     quickNote = cfg.quickNote;
     chatConfig = cfg.chat;
     tasksConfig = cfg.tasks;
+    leaveConfig = cfg.leave;
     createTray();
 
     // Keep the tray menu and the picker footer in step with the updater.
@@ -1244,6 +1262,15 @@ if (!gotLock) {
     });
     tasks.init({ portals, config: tasksConfig });
 
+    // Leave: a card with Approve / Reject for the approver a request is
+    // flagged to, and a card back to the person with the answer. Its own
+    // feed, so it does not depend on the task pop-up switch (as chat).
+    leave.init({
+      portals,
+      config: leaveConfig,
+      openPortalAt: (portalId, url) => openPortal(portalId, url)
+    });
+
     // Start with the computer (on unless switched off in the tray). Started
     // that way, stay in the tray rather than opening the picker.
     autostart.init();
@@ -1261,6 +1288,7 @@ if (!gotLock) {
     if (chatTray && !chatTray.isDestroyed()) chatTray.destroy();
     if (tasksTray && !tasksTray.isDestroyed()) tasksTray.destroy();
     tasks.dispose();
+    leave.dispose();
     updater.dispose();
     notifications.dispose();
     chat.dispose();

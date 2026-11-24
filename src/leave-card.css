@@ -1,0 +1,222 @@
+/* The leave request card. Same colours as the pop-up cards (popup.css), so it
+   reads as part of the Launcher; its own window so it can take a typed reason. */
+:root {
+  --card: #1b2530;
+  --text: #e8eef5;
+  --muted: #8a99a8;
+  --border: #2f3f50;
+  --accent: #f59e0b;
+  --approve: #16a34a;
+  --approve-hover: #15803d;
+  --reject: #f87171;
+  --reject-solid: #dc2626;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--card);
+  overflow: hidden;
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  user-select: none;
+}
+
+.card {
+  padding: 12px 14px 10px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  /* The head doubles as the handle for moving the card. */
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  -webkit-app-region: drag;
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.later {
+  -webkit-app-region: no-drag;
+  background: none;
+  border: 0;
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.later:hover {
+  color: var(--text);
+}
+
+.who {
+  margin-top: 6px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.who .type {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.lines div {
+  margin-top: 2px;
+}
+
+.lines .change {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.note {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  /* A note can be long; the card grows to a limit, then this scrolls. */
+  max-height: 96px;
+  overflow-y: auto;
+  user-select: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.others {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.escalated {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--reject);
+}
+
+.buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+button {
+  font: inherit;
+}
+
+.approve,
+.reject,
+.back {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: 5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.approve {
+  border: 1px solid var(--approve);
+  background: var(--approve);
+  color: #fff;
+}
+
+.approve:hover {
+  background: var(--approve-hover);
+}
+
+.reject {
+  border: 1px solid var(--reject);
+  background: transparent;
+  color: var(--reject);
+}
+
+.reject:hover {
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.reject.solid {
+  border-color: var(--reject-solid);
+  background: var(--reject-solid);
+  color: #fff;
+}
+
+.back {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.rejecting label {
+  display: block;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+textarea {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #121a23;
+  color: var(--text);
+  font: inherit;
+  resize: none;
+  user-select: text;
+}
+
+textarea:focus {
+  outline: 1px solid var(--accent);
+}
+
+.message {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--reject);
+}
+
+.message.ok {
+  color: #86efac;
+}
+
+.open {
+  display: block;
+  margin: 8px auto 0;
+  background: none;
+  border: 0;
+  padding: 2px 4px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.open:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+[hidden] {
+  display: none !important;
+}
