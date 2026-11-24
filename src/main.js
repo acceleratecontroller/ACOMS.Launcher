@@ -296,6 +296,8 @@ function positionPicker(win) {
 
 function showPicker() {
   refreshLocalPortals().catch(() => {});
+  // Fresh leave every time the picker is opened, not only on the minute.
+  leave.poll().catch(() => {});
   if (pickerWindow && !pickerWindow.isDestroyed()) {
     positionPicker(pickerWindow);
     pickerWindow.show();
