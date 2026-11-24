@@ -251,9 +251,10 @@ function attachLinkHandling(contents) {
 // Picker window
 // ---------------------------------------------------------------------------
 const PICKER_WIDTH = 420;
-// Tall enough for a full leave strip plus seven portals without a
-// scrollbar; it only scrolls if you add more portals.
-const PICKER_HEIGHT = 760;
+// The height of the page itself (the title bar is extra): tall enough for the
+// leave strip plus seven portals without a scrollbar. It only scrolls if you
+// add more portals, or on a screen too short to fit it.
+const PICKER_HEIGHT = 820;
 // Room left below the picker for an auto-hidden macOS Dock to slide up over,
 // so the picker sits above it rather than behind it.
 const AUTO_HIDE_DOCK_CLEARANCE = 96;
@@ -302,9 +303,18 @@ function showPicker() {
     return;
   }
 
+  // Never taller than the screen it opens on.
+  let pickerHeight = PICKER_HEIGHT;
+  try {
+    pickerHeight = Math.min(PICKER_HEIGHT, screen.getPrimaryDisplay().workArea.height - 80);
+  } catch {
+    // Keep the full height.
+  }
+
   pickerWindow = new BrowserWindow({
     width: PICKER_WIDTH,
-    height: PICKER_HEIGHT,
+    height: pickerHeight,
+    useContentSize: true,
     show: false,
     resizable: false,
     fullscreenable: false,

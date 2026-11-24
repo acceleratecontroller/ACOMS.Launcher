@@ -390,7 +390,10 @@ body {
 }
 
 .leave {
-  display: block;
+  /* A column from the top, so the title sits in the same place in every state. */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
   width: 100%;
   text-align: left;
   background: transparent;
@@ -401,9 +404,15 @@ body {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 8px 12px;
-  max-height: 150px;
-  overflow-y: auto;
-  scrollbar-width: thin;
+  /* Always the same height: a title, four lines and the "plus N" line. */
+  height: 134px;
+  overflow: hidden;
+}
+
+.leave__note {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
 }
 
 .leave__title {
