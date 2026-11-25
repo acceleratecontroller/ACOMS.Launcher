@@ -40,10 +40,10 @@ test('a LAFHA card says who, the dates and nights, the job, and what each rate c
 test('the approver sets the amount: one Approve button per fixed rate', () => {
   const c = rules.lafhaCardContent(request(), RATES);
   assert.deepStrictEqual(
-    c.approve.map((a) => [a.rateKind, a.text, a.total]),
+    c.approve.map((a) => [a.rateKind, a.text, a.total, a.confirm]),
     [
-      ['STANDARD', 'Approve $200', '4 nights at $200 = $800'],
-      ['ACCOMMODATION_PAID', 'Approve $60', '4 nights at $60 = $240']
+      ['STANDARD', 'Approve $200', '4 nights at $200 = $800', 'Confirm $800'],
+      ['ACCOMMODATION_PAID', 'Approve $60', '4 nights at $60 = $240', 'Confirm $240']
     ]
   );
   assert.strictEqual(c.openText, 'Change the dates or the amount');
@@ -75,7 +75,7 @@ test('what the person owes from earlier LAFHA is on the card, only the part that
     }),
     RATES
   );
-  assert.strictEqual(c.othersOff, 'Owes $260 from earlier LAFHA. It comes off this one.');
+  assert.strictEqual(c.othersOff, 'Owes $260 from earlier LAFHA. It comes off their next LAFHA payment.');
   assert.strictEqual(rules.lafhaCardContent(request(), RATES).othersOff, null);
 });
 

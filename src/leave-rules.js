@@ -187,7 +187,7 @@ function lafhaCardContent(item, rates = []) {
     leaveType: 'LAFHA',
     lines,
     note: item.note || null,
-    othersOff: owed > 0 ? `Owes ${money(owed)} from earlier LAFHA. It comes off this one.` : null,
+    othersOff: owed > 0 ? `Owes ${money(owed)} from earlier LAFHA. It comes off their next LAFHA payment.` : null,
     escalated: item.escalated === true,
     firstName: String(item.employeeName || 'They').split(' ')[0],
     approve: (Array.isArray(rates) ? rates : [])
@@ -195,6 +195,7 @@ function lafhaCardContent(item, rates = []) {
       .map((r) => ({
         rateKind: r.kind,
         text: `Approve ${money(r.dollars)}`,
+        confirm: `Confirm ${money(r.dollars * item.nights)}`,
         total: `${nightsText(item.nights)} at ${money(r.dollars)} = ${money(r.dollars * item.nights)}`
       })),
     openText: 'Change the dates or the amount'

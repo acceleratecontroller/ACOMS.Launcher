@@ -220,3 +220,10 @@ textarea:focus {
 [hidden] {
   display: none !important;
 }
+
+/* A LAFHA rate button pressed once: it now says what it will approve. */
+.approve.armed {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: #1b2530;
+}
