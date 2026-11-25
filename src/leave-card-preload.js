@@ -9,7 +9,8 @@ contextBridge.exposeInMainWorld('acomsLeaveCard', {
     ipcRenderer.on('leave-card:show', (_event, content) => callback(content));
   },
   height: (px) => ipcRenderer.send('leave-card:height', px),
-  decide: (decision, comment) => ipcRenderer.invoke('leave-card:decide', { decision, comment }),
+  // rateKind: LAFHA only, the amount a night the approver picked.
+  decide: (decision, comment, rateKind) => ipcRenderer.invoke('leave-card:decide', { decision, comment, rateKind }),
   openPage: () => ipcRenderer.send('leave-card:open-page'),
   later: () => ipcRenderer.send('leave-card:later')
 });

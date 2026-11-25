@@ -36,6 +36,7 @@ const FIRST_POLL_DELAY_MS = 1500;
 const FIRST_RETRY_MS = 8 * 1000;
 const REQUEST_TIMEOUT_MS = 15 * 1000;
 const SEEN_SCOPE = 'leave-answers';
+const LAFHA_SEEN_SCOPE = 'lafha-answers';
 
 let portal = null; // the portal that hosts the routes (Controller)
 // Where a card's link opens. ACOMS.OS, not Controller: the Leave page there
@@ -86,6 +87,12 @@ function absolute(relative) {
 function openLeavePage() {
   if (!openPage || !pagePortal) return;
   openPage(pagePortal.id, new URL(config.page, pagePortal.url).toString());
+}
+
+// The LAFHA page in ACOMS.OS: where the dates, nights or amount are changed.
+function openLafhaPage() {
+  if (!openPage || !pagePortal) return;
+  openPage(pagePortal.id, new URL(config.lafhaPage, pagePortal.url).toString());
 }
 
 // One window of the Calendar for the Calendar window: { ok, data } | { ok: false, message }.
@@ -237,8 +244,14 @@ async function poll() {
     const quiet = store.inQuietHours();
     setUpcoming({ status: 'ready', ...rules.upcomingLines(r.data.upcoming), dates: rules.keyDates(r.data.dates) });
 
+    // LAFHA requests flagged to this person ride on the same feed. A
+    // Controller that does not send the block yet simply has none.
+    const lafha = r.data.lafha && typeof r.data.lafha === 'object' ? r.data.lafha : {};
+    const lafhaCards = (Array.isArray(lafha.toDecide) ? lafha.toDecide : []).map((item) => rules.lafhaCardContent(item, lafha.rates));
+
     const plan = rules.planCards({
       toDecide: Array.isArray(r.data.toDecide) ? r.data.toDecide : [],
+      extra: lafhaCards,
       openKeys: [...cards.keys()],
       hiddenKeys: hiddenKeys(),
       quiet
@@ -267,6 +280,28 @@ async function poll() {
         onClick: () => openLeavePage()
       });
     }
+
+    const lafhaAnswers = rules.planAnswers({
+      answers: Array.isArray(lafha.answers) ? lafha.answers : [],
+      seen: store.seenMap(),
+      primed: store.isPrimed(LAFHA_SEEN_SCOPE),
+      quiet,
+      content: rules.lafhaAnswerContent
+    });
+    if (lafhaAnswers.baseline) store.markPrimed(LAFHA_SEEN_SCOPE);
+    if (lafhaAnswers.markSeen.length) store.recordSeen({ markSeen: lafhaAnswers.markSeen });
+    for (const a of lafhaAnswers.announce) {
+      popup.show({
+        key: a.seenId,
+        kind: a.rejected ? 'reminder' : 'portal',
+        label: a.label,
+        title: a.title,
+        body: a.body,
+        badge: 'A',
+        sticky: true,
+        onClick: () => openLafhaPage()
+      });
+    }
   } finally {
     polling = false;
   }
@@ -283,7 +318,7 @@ function init({ portals = [], config: cfg = null, openPortalAt = null } = {}) {
   if (!cfg || !cfg.portal || !cfg.feed || !cfg.act) return;
   portal = portals.find((p) => p.id === cfg.portal) || null;
   if (!portal) return;
-  config = { page: '/leave-requests', listPage: '/leave-requests', ...cfg };
+  config = { page: '/leave-requests', listPage: '/leave-requests', lafhaAct: '/api/lafha-requests', lafhaPage: '/my-lafha', ...cfg };
   upcoming = { status: 'loading', lines: [], more: '', all: [] };
   pagePortal = portals.find((p) => p.id === cfg.pagePortal) || portal;
   openPage = openPortalAt;
@@ -305,10 +340,21 @@ function init({ portals = [], config: cfg = null, openPortalAt = null } = {}) {
     const comment = payload && typeof payload.comment === 'string' ? payload.comment.trim() : '';
     if (decision === 'reject' && !comment) return { ok: false, message: 'Say why it is rejected. One line is enough.' };
 
-    const r = await request(config.act, {
-      method: 'POST',
-      body: { action: 'decide', id: card.content.id, decision, comment: comment || null }
-    });
+    let r;
+    if (card.content.kind === 'lafha') {
+      // LAFHA: approving names the amount a night; the card only offers the fixed ones.
+      const rateKind = payload && typeof payload.rateKind === 'string' ? payload.rateKind : '';
+      if (decision === 'approve' && !rateKind) return { ok: false, message: 'Pick the amount a night.' };
+      r = await request(config.lafhaAct, {
+        method: 'POST',
+        body: decision === 'approve' ? { action: 'approve', id: card.content.id, rateKind } : { action: 'reject', id: card.content.id, comment }
+      });
+    } else {
+      r = await request(config.act, {
+        method: 'POST',
+        body: { action: 'decide', id: card.content.id, decision, comment: comment || null }
+      });
+    }
     if (!r.ok) return { ok: false, message: r.message };
     // changed:false = someone else already decided it. Either way it is done.
     const already = r.data && r.data.changed === false && r.data.message ? r.data.message : null;
@@ -319,8 +365,11 @@ function init({ portals = [], config: cfg = null, openPortalAt = null } = {}) {
     return { ok: true, message: already };
   });
 
-  ipcMain.on('leave-card:open-page', () => {
-    openLeavePage();
+  ipcMain.on('leave-card:open-page', (event) => {
+    const key = keyOf(event.sender);
+    const card = key && cards.get(key);
+    if (card && card.content.kind === 'lafha') openLafhaPage();
+    else openLeavePage();
   });
 
   // Hidden until the next poll; the request is still waiting and comes back.

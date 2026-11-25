@@ -27,10 +27,11 @@
   function setBusy(on) {
     busy = on;
     for (const id of ['approve', 'reject', 'back']) $(id).disabled = on;
+    for (const b of document.querySelectorAll('.approve.rate')) b.disabled = on;
     $('send-reject').disabled = on || !$('why').value.trim();
   }
 
-  async function decide(decision) {
+  async function decide(decision, rateKind) {
     if (busy) return;
     const comment = $('why').value.trim();
     if (decision === 'reject' && !comment) {
@@ -41,7 +42,7 @@
     say('');
     let result;
     try {
-      result = await api.decide(decision, comment);
+      result = await api.decide(decision, comment, rateKind);
     } catch {
       result = { ok: false, message: 'That did not go through. Try again.' };
     }
@@ -80,6 +81,22 @@
     $('others').textContent = c.othersOff || '';
     $('others').hidden = !c.othersOff;
     $('escalated').hidden = !c.escalated;
+    $('label').textContent = c.label || 'Leave request';
+    $('open').textContent = c.openText || 'Open leave requests';
+    // LAFHA: the approver sets the amount, so one Approve button per rate
+    // stands in for the single Approve. Hovering one shows what it comes to.
+    for (const old of document.querySelectorAll('.approve.rate')) old.remove();
+    const rates = Array.isArray(c.approve) ? c.approve : [];
+    $('approve').hidden = rates.length > 0;
+    rates.forEach((r) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'approve rate';
+      b.textContent = r.text;
+      if (r.total) b.title = r.total;
+      b.addEventListener('click', () => decide('approve', r.rateKind));
+      $('buttons').insertBefore(b, $('reject'));
+    });
     $('why-label').textContent = `Why is it rejected? ${firstName} will see this.`;
     fit();
   });
