@@ -94,7 +94,29 @@
       b.className = 'approve rate';
       b.textContent = r.text;
       if (r.total) b.title = r.total;
-      b.addEventListener('click', () => decide('approve', r.rateKind));
+      // Two presses, because the two rates sit side by side and it is money:
+      // the first turns the button into "Confirm $800", the second approves.
+      // Pressing the other rate, or waiting, puts it back.
+      let armedTimer = null;
+      const disarm = () => {
+        b.classList.remove('armed');
+        b.textContent = r.text;
+        if (armedTimer) clearTimeout(armedTimer);
+        armedTimer = null;
+      };
+      b.disarm = disarm;
+      b.addEventListener('click', () => {
+        if (busy) return;
+        if (b.classList.contains('armed')) {
+          disarm();
+          decide('approve', r.rateKind);
+          return;
+        }
+        for (const other of document.querySelectorAll('.approve.rate')) if (other !== b && other.disarm) other.disarm();
+        b.classList.add('armed');
+        b.textContent = r.confirm || `Confirm ${r.text}`;
+        armedTimer = setTimeout(disarm, 8000);
+      });
       $('buttons').insertBefore(b, $('reject'));
     });
     $('why-label').textContent = `Why is it rejected? ${firstName} will see this.`;
