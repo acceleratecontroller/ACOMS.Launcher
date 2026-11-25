@@ -89,10 +89,11 @@ function cardContent(item) {
 // Which cards should be open, given what Controller says is waiting and what
 // is on screen now. `quiet` (quiet hours) holds NEW cards back; one already
 // open stays open, and one that is no longer waiting always closes.
-function planCards({ toDecide = [], openKeys = [], hiddenKeys = [], quiet = false }) {
+function planCards({ toDecide = [], extra = [], openKeys = [], hiddenKeys = [], quiet = false }) {
   // "Later" hides a card for a while; it is still waiting, just not shown.
   const hidden = new Set(hiddenKeys);
-  const wanted = toDecide.map(cardContent).filter((c) => !hidden.has(c.key));
+  // `extra` = cards another kind of request has already built (LAFHA).
+  const wanted = [...toDecide.map(cardContent), ...extra].filter((c) => !hidden.has(c.key));
   const wantedKeys = new Set(wanted.map((c) => c.key));
   const open = new Set(openKeys);
   const close = openKeys.filter((k) => !wantedKeys.has(k));
@@ -138,12 +139,96 @@ function answerContent(answer) {
 // Which answers to show now. The very first time this ever runs, everything
 // already there is recorded and nothing is shown: a new version must not
 // greet someone with a week of old answers.
-function planAnswers({ answers = [], seen = {}, primed = true, quiet = false }) {
-  const all = answers.map(answerContent);
+function planAnswers({ answers = [], seen = {}, primed = true, quiet = false, content = answerContent }) {
+  const all = answers.map(content);
   if (!primed) return { announce: [], markSeen: all.map((a) => a.seenId), baseline: true };
   const fresh = all.filter((a) => !seen[a.seenId]);
   if (quiet) return { announce: [], markSeen: [], baseline: false }; // shown when quiet hours end
   return { announce: fresh, markSeen: fresh.map((a) => a.seenId), baseline: false };
+}
+
+// ── LAFHA ──────────────────────────────────────────────────────────────────
+// A LAFHA request rides on the same feed and the same card window as leave.
+// The approver sets the amount a night, so the card has one Approve button
+// per fixed rate (Controller sends them). Anything else (other dates, fewer
+// nights, another amount) is done on the LAFHA page in ACOMS.OS.
+
+function money(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return '';
+  return `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
+}
+
+function nightsText(n) {
+  return `${n} night${n === 1 ? '' : 's'}`;
+}
+
+function lafhaCardKey(item) {
+  return `lafha:${item.id}`;
+}
+
+function lafhaCardContent(item, rates = []) {
+  const lines = [`${formatDay(item.leaveDate)} to ${formatDay(item.homeDate)} · ${nightsText(item.nights)}`];
+  lines.push(item.job && item.job.label ? item.job.label : `No job: ${item.noJobReason || ''}`);
+  if (item.place) lines.push(`Staying: ${item.place}`);
+  if (item.enteredByName) lines.push(`Asked by ${item.enteredByName}`);
+  // What each button comes to, on the card itself, so nobody has to work it out.
+  const priced = (Array.isArray(rates) ? rates : []).filter((r) => r && typeof r.dollars === 'number');
+  if (priced.length) lines.push(priced.map((r) => `${money(r.dollars)} a night = ${money(r.dollars * item.nights)}`).join(' · '));
+  // What they owe from LAFHA paid for nights not stayed, which comes off this one.
+  const owed = (Array.isArray(item.owes) ? item.owes : [])
+    .filter((o) => o && o.method === 'NEXT_LAFHA' && typeof o.remaining === 'number')
+    .reduce((sum, o) => sum + o.remaining, 0);
+  return {
+    key: lafhaCardKey(item),
+    kind: 'lafha',
+    id: item.id,
+    label: 'LAFHA request',
+    name: item.employeeName || 'Someone',
+    leaveType: 'LAFHA',
+    lines,
+    note: item.note || null,
+    othersOff: owed > 0 ? `Owes ${money(owed)} from earlier LAFHA. It comes off this one.` : null,
+    escalated: item.escalated === true,
+    firstName: String(item.employeeName || 'They').split(' ')[0],
+    approve: (Array.isArray(rates) ? rates : [])
+      .filter((r) => r && typeof r.kind === 'string' && typeof r.dollars === 'number')
+      .map((r) => ({
+        rateKind: r.kind,
+        text: `Approve ${money(r.dollars)}`,
+        total: `${nightsText(item.nights)} at ${money(r.dollars)} = ${money(r.dollars * item.nights)}`
+      })),
+    openText: 'Change the dates or the amount'
+  };
+}
+
+function lafhaAnswerSeenId(answer) {
+  return `lafha-answer:${answer.id}`;
+}
+
+// The small card the person the LAFHA is for gets back.
+function lafhaAnswerContent(answer) {
+  const r = answer.request || {};
+  const when = `${formatDay(r.leaveDate)} to ${formatDay(r.homeDate)}`;
+  const by = answer.by ? `, by ${answer.by}` : '';
+  const rejected = answer.kind === 'REJECTED';
+  const note = answer.comment ? ` ${rejected ? 'Reason' : 'Note'}: ${answer.comment}` : '';
+  const total = typeof r.total === 'number' ? `, ${money(r.total)}` : '';
+  let title = 'The nights on your LAFHA were changed';
+  let body = `Now ${when}, ${nightsText(r.nights)}${by}.${note}`;
+  if (answer.kind === 'APPROVED') {
+    title = 'Your LAFHA was approved';
+    body = `${when}, ${nightsText(r.nights)}${total}${by}.${note}`;
+  } else if (rejected) {
+    title = 'Your LAFHA was not approved';
+    body = `${when}${by}.${note}`;
+  } else if (answer.kind === 'PAID') {
+    title = 'Your LAFHA has been paid';
+    body = `${when}${typeof answer.amount === 'number' ? `: ${money(answer.amount)}` : ''}.`;
+  } else if (answer.kind === 'CANCELLED') {
+    title = 'Your LAFHA was cancelled';
+    body = `${when}${by}.${note}`;
+  }
+  return { seenId: lafhaAnswerSeenId(answer), label: 'LAFHA', title, body, rejected };
 }
 
 // Request cards stack down from the top-right corner, so they never sit on
@@ -242,6 +327,8 @@ module.exports = {
   formatPart,
   cardKey,
   cardContent,
+  lafhaCardContent,
+  lafhaAnswerContent,
   planCards,
   answerSeenId,
   answerContent,
